@@ -166,13 +166,24 @@ textarea{min-height:92px;font-family:var(--f-mono);font-size:12px}
 .sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:50;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-weight:600;font-size:14px;max-width:90vw}
 @media (max-width:380px){.rates{grid-template-columns:1fr 1fr}.kpi .v{font-size:22px}.three{grid-template-columns:1fr 1fr}}
-.cvbox{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}
-.cvbox.on{border-color:var(--blue)}
-.cvbox .amt{flex:1;min-width:0;font:600 26px var(--f-display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
-.cvcur{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:8px 12px;font-weight:600;font-size:14px;white-space:nowrap}
-.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.key{min-height:54px;border-radius:14px;border:1px solid var(--line);background:var(--surface2);font:600 22px var(--f-display)}
-.key:active{background:var(--line)}
+.calc{position:fixed;inset:0;z-index:36;background:var(--bg);display:flex;flex-direction:column;padding:env(safe-area-inset-top,0px) max(16px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));overflow:auto}
+.cv-top{display:flex;align-items:center;gap:12px;padding:12px 0}.cv-top h2{flex:1;margin:0}
+.cv-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;min-height:0}
+.cv-sec{position:relative;display:flex;flex-direction:column;gap:6px}
+.cvchip{align-self:flex-start;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:9px 16px;font-weight:600;font-size:15px}
+.cvlist{position:absolute;top:46px;left:0;z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px;display:flex;flex-direction:column;min-width:230px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.cvlist button{border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:10px;font-size:15px}
+.cvlist button.on{background:var(--surface2);color:var(--blue)}
+.cv-amt{font-family:var(--f-display);font-weight:700;line-height:1.15;word-break:break-all;min-height:56px}
+.cv-mid{display:flex;align-items:center;gap:14px}.cv-mid i{flex:1;height:1px;background:var(--line)}
+.cv-swap{width:52px;height:52px;border-radius:50%;border:0;background:var(--blue);color:var(--blue-ink);display:grid;place-items:center}.cv-swap svg{width:24px;height:24px}
+.icon-btn.sm{width:36px;height:36px}.icon-btn.sm svg{width:18px;height:18px}
+.cv-info{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;margin-top:6px}.cv-info span{color:var(--muted);font-size:12px}
+.cv-keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.ck{min-height:56px;border-radius:18px;border:1px solid var(--line);background:var(--surface);font:600 22px var(--f-display);color:var(--fg)}
+.ck.op{background:var(--surface2);color:var(--muted)}.ck.clr{color:var(--warn)}.ck.eq{background:var(--blue);color:var(--blue-ink);border-color:var(--blue)}
+.ck:active{filter:brightness(1.25)}
+@media (max-height:700px){.ck{min-height:46px}}
 .stackbar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--surface2)}
 .stackbar i{display:block;height:100%}
 .sug{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
@@ -957,35 +968,59 @@ function sugCard(){
 }
 
 
-/* calculadora de conversión estilo "Rial": dos cajas, teclado numérico y cambio de moneda */
-var CUR=[['bcv','$','BCV','Dólar BCV'],['euro','€','Euro','Euro BCV'],['usdt','₮','USDT','USDT (Binance)'],['bs','Bs','Bs','Bolívares']];
+/* calculadora de conversión a pantalla completa: expresión arriba, resultado abajo, teclado con operaciones */
+var CUR=[['bcv','$','USD · BCV','Dólar BCV','Bs/$'],['euro','€','EUR · BCV','Euro BCV','Bs/€'],['usdt','₮','USDT · Binance','USDT (Binance)','Bs/USDT'],['bs','Bs.','Bs · VES','Bolívares','']];
+var C={from:'bcv',to:'bs',expr:'',pick:null};
 function cvInfo(k){return CUR.find(function(c){return c[0]===k})}
-function cvShow(raw){if(raw==='')return '0';var p=raw.split(','),ip=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');return ip+(p.length>1?','+p[1]:'')}
-function cvRaw(v){return v>0?String(Math.round(v*100)/100).replace('.',','):''}
-function convSheet(){F={kind:'conv',from:'bcv',to:'bs',act:'from',txt:'',pick:null};openSheet('Calculadora de conversión','');updateConv()}
+function cvNum(t){var p=t.split(','),ip=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');return ip+(p.length>1?','+p[1]:'')}
+function cvDisp(e){if(e==='')return '0';return e.split(/([+\-*\/])/).map(function(t){return t==='+'?' + ':t==='-'?' − ':t==='*'?' × ':t==='/'?' ÷ ':cvNum(t)}).join('')}
+function cvEval(e){
+  var tk=e.replace(/,/g,'.').split(/([+\-*\/])/).filter(function(x){return x!==''});
+  while(tk.length&&/[+\-*\/]/.test(tk[tk.length-1]))tk.pop();
+  if(!tk.length)return 0;
+  var out=[+tk[0]||0],i,op,v;
+  for(i=1;i<tk.length;i+=2){op=tk[i];v=+tk[i+1]||0;
+    if(op==='*')out[out.length-1]*=v;else if(op==='/')out[out.length-1]=v?out[out.length-1]/v:0;else out.push(op==='-'?-v:v)}
+  return out.reduce(function(a,b){return a+b},0);
+}
+function cvRates(){var r=curRates();return {r:r,R:{bcv:r.bcv,euro:r.euro,usdt:r.usdt,bs:1}}}
+function cvResult(){var x=cvRates(),R=x.R;return cvEval(C.expr)*R[C.from]/R[C.to]}
+function cvFmtMoney(k,v){var c=cvInfo(k);return k==='usdt'?fmt(v)+' USDT':c[1]+' '+fmt(v)}
+function convSheet(){
+  if($('#calc'))return;var d=document.createElement('div');d.id='calc';d.className='calc';document.body.appendChild(d);document.body.classList.add('lock');C.pick=null;updateConv();
+}
+function cvClose(){var d=$('#calc');if(d)d.remove();document.body.classList.remove('lock')}
 function updateConv(){
-  var r=curRates(),body=$('#sheet-body');
-  if(!(r.bcv&&r.euro&&r.usdt)){body.innerHTML='<div class="muted">Registra primero las tasas en Tasas.</div>';return}
-  var R={bcv:r.bcv,euro:r.euro,usdt:r.usdt,bs:1},f=F.from,t=F.to,v=num(F.txt),top,bot;
-  if(F.act==='from'){top=cvShow(F.txt);bot=fmt(v*R[f]/R[t])}else{top=fmt(v*R[t]/R[f]);bot=cvShow(F.txt)}
-  function box(side,k,val){var c=cvInfo(k);
-    return '<div class="cvbox'+(F.act===side?' on':'')+'" data-act="cvact" data-v="'+side+'" role="button" tabindex="0"><span class="muted" style="font-size:20px;font-weight:600">'+c[1]+'</span><span class="amt">'+val+'</span><button class="cvcur" data-act="cvpick" data-v="'+side+'">'+c[2]+' ▾</button></div>'
-    +(F.pick===side?'<div class="prev">'+CUR.map(function(o){return '<button class="item" style="padding:8px 0" data-act="cvcur" data-v="'+o[0]+'"><div class="grow"><div class="t">'+o[1]+' '+o[3]+'</div></div>'+(o[0]===k?'<span class="pill blue">Elegida</span>':'')+'</button>'}).join('')+'</div>':'');
-  }
-  var keys=['1','2','3','4','5','6','7','8','9',',','0','⌫'].map(function(k){return '<button class="key" data-act="cvkey" data-v="'+k+'" aria-label="'+(k==='⌫'?'Borrar':k)+'">'+k+'</button>'}).join('');
-  var one=R[f]/R[t];
-  body.innerHTML='<div class="stack">'+box('from',f,top)
-    +'<div class="row" style="justify-content:center"><button class="btn small ghost" data-act="cvswap" aria-label="Intercambiar monedas">⇅ Intercambiar</button><button class="btn small ghost" data-act="cvclear">Limpiar</button></div>'
-    +box('to',t,bot)
-    +'<div class="foot" style="text-align:center">1 '+cvInfo(f)[2]+' = '+fmt(one,one<1?4:2)+' '+cvInfo(t)[2]+' · tasas del '+dayLabel(r.date).toLowerCase()+'</div>'
-    +'<div class="keys">'+keys+'</div></div>';
+  var d=$('#calc');if(!d)return;var x=cvRates(),r=x.r,R=x.R;
+  if(!(r.bcv&&r.euro&&r.usdt)){d.innerHTML='<div class="cv-top"><button class="icon-btn" data-act="cvclose" aria-label="Volver">‹</button><h2>Calculadora</h2></div><div class="muted" style="padding:20px">Registra primero las tasas en Tasas.</div>';return}
+  var f=C.from,t=C.to,fi=cvInfo(f),ti=cvInfo(t),res=cvResult(),top=(f==='usdt'?'':fi[1]+' ')+cvDisp(C.expr),bot=(t==='usdt'?'':ti[1]+' ')+fmt(res)+(t==='usdt'?' USDT':'');
+  function size(s){return s.length>20?24:s.length>15?30:s.length>11?38:46}
+  function chip(side,k){var c=cvInfo(k);return '<button class="cvchip" data-act="cvpick" data-v="'+side+'">'+c[2]+' ▾</button>'+(C.pick===side?'<div class="cvlist">'+CUR.map(function(o){return '<button data-act="cvcur" data-v="'+o[0]+'"'+(o[0]===k?' class="on"':'')+'><b>'+o[1]+'</b> '+o[3]+'</button>'}).join('')+'</div>':'')}
+  function key(v,l,cls,al){return '<button class="ck '+(cls||'')+'" data-act="cvkey" data-v="'+v+'" aria-label="'+(al||l)+'">'+l+'</button>'}
+  var one=R[f]/R[t],age=dayDiff(r.date);
+  d.innerHTML='<div class="cv-top"><button class="icon-btn" data-act="cvclose" aria-label="Volver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Calculadora</h2><button class="icon-btn" data-act="cvrates" aria-label="Tasas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg></button></div>'
+    +'<div class="cv-body"><div class="cv-sec">'+chip('from',f)+'<div class="cv-amt" style="font-size:'+size(top)+'px">'+esc(top)+'</div></div>'
+    +'<div class="cv-mid"><i></i><button class="cv-swap" data-act="cvswap" aria-label="Intercambiar monedas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20V5M4 9l4-4 4 4M16 4v15M12 15l4 4 4-4"/></svg></button><i></i></div>'
+    +'<div class="cv-sec">'+chip('to',t)+'<div class="row sb" style="align-items:flex-start;gap:8px"><div class="cv-amt" style="font-size:'+size(bot)+'px;color:var(--blue)">'+esc(bot)+'</div><div class="row" style="gap:6px;flex:none"><button class="icon-btn sm" data-act="cvcopy" aria-label="Copiar resultado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button><button class="icon-btn sm" data-act="cvshare" aria-label="Compartir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg></button></div></div></div>'
+    +'<div class="cv-info"><b>'+cvFmtMoney(f,1)+' = '+(t==='bs'?'Bs. '+fmt(one):cvFmtMoney(t,one))+'</b><span>'+(age>0?'Tasas de hace '+age+(age===1?' día':' días')+' ('+dayLabel(r.date).toLowerCase()+')':'Tasas de hoy')+(age>0?'. Actualízalas en Tasas.':'')+'</span></div></div>'
+    +'<div class="cv-keys">'+key('div','÷','op','Dividir')+key('mul','×','op','Multiplicar')+key('sub','−','op','Restar')+key('add','+','op','Sumar')
+    +key('1','1')+key('2','2')+key('3','3')+key('back','⌫','op','Borrar')
+    +key('4','4')+key('5','5')+key('6','6')+key('C','C','clr','Limpiar')
+    +key('7','7')+key('8','8')+key('9','9')+key('eq','›','eq','Calcular')
+    +key(',',',')+key('0','0')+key("00","00")+"</div>";
 }
 function cvKey(k){
-  var x=F.txt;
-  if(k==='⌫')x=x.slice(0,-1);
-  else if(k===','){if(x.indexOf(',')<0)x=(x===''?'0':x)+','}
-  else{if(x==='0')x='';if(x.length<12&&!(x.indexOf(',')>=0&&x.split(',')[1].length>=2))x+=k}
-  F.txt=x;updateConv();
+  var e=C.expr,last=e.slice(-1),isOp=function(c){return /[+\-*\/]/.test(c)},opmap={add:'+',sub:'-',mul:'*',div:'/'};
+  if(k==='C')e='';
+  else if(k==='back')e=e.slice(0,-1);
+  else if(k==='eq'){var v=cvEval(e);e=v?String(Math.round(v*100)/100).replace('.',','):''}
+  else if(opmap[k]){if(e==='')return;if(isOp(last))e=e.slice(0,-1);e+=opmap[k]}
+  else{var cur=e.split(/[+\-*\/]/).pop();
+    if(k===','){if(cur.indexOf(',')>=0)return;e+=cur===''?'0,':','}
+    else if(cur.indexOf(',')>=0&&cur.split(',')[1].length>=(k==='00'?1:2))return;
+    else if(k==='00'){if(cur===''||cur==='0')return;e+='00'}
+    else{if(cur==='0')e=e.slice(0,-1);e+=k}}
+  if(e.length>24)return;C.expr=e;updateConv();
 }
 /* tasas del día */
 UI.auto={ok:false,msg:'Aún no se ha intentado hoy.',log:[]};
@@ -1148,11 +1183,14 @@ var A={
   rep:function(t){UI.rep=t.dataset.v;render()},
   conv:function(){convSheet()},
   cvkey:function(t){cvKey(t.dataset.v)},
-  cvclear:function(){F.txt='';updateConv()},
-  cvswap:function(){var x=F.from;F.from=F.to;F.to=x;F.pick=null;updateConv()},
-  cvact:function(t,e){if(e.target.closest('.cvcur'))return;var side=t.dataset.v;if(F.act!==side){var r=curRates(),R={bcv:r.bcv,euro:r.euro,usdt:r.usdt,bs:1},v=num(F.txt),o=F.act==='from'?v*R[F.from]/R[F.to]:v*R[F.to]/R[F.from];F.txt=cvRaw(o);F.act=side}F.pick=null;updateConv()},
-  cvpick:function(t){F.pick=F.pick===t.dataset.v?null:t.dataset.v;updateConv()},
-  cvcur:function(t){F[F.pick]=t.dataset.v;F.pick=null;updateConv()},
+  cvclose:cvClose,
+  cvrates:function(){cvClose();UI.tab='rates';render();window.scrollTo(0,0)},
+  cvswap:function(){var x=C.from;C.from=C.to;C.to=x;C.pick=null;updateConv()},
+  cvpick:function(t){C.pick=C.pick===t.dataset.v?null:t.dataset.v;updateConv()},
+  cvcur:function(t){C[C.pick]=t.dataset.v;C.pick=null;updateConv()},
+  cvcopy:function(){var v=fmt(cvResult());copyText(v,'Resultado copiado: '+v)},
+  cvshare:function(){var f=C.from,t=C.to,tx=cvFmtMoney(f,cvEval(C.expr))+' = '+cvFmtMoney(t,cvResult())+' (XC iStore)';
+    if(navigator.share){navigator.share({text:tx}).catch(function(){})}else copyText(tx,'Copiado para compartir')},
   adj:function(t){adjSheet(t.dataset.id)},saveadj:saveAdj,
   step:function(t){var i=$('#a-new');i.value=Math.max(0,Math.floor(num(i.value))+(+t.dataset.d));updateAdj()},
   biz:function(){bizSheet()},bizedit:function(t){bizSheet(t.dataset.id)},savebiz:saveBiz,
@@ -1198,7 +1236,7 @@ document.addEventListener('change',function(e){
   if(t.id==='bk-file'){var f=t.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){$('#bk-text').value=String(rd.result);toast('Archivo cargado. Toca Restaurar respaldo.')};rd.readAsText(f)}
   if(t.id==='p-file'){var g=t.files[0];if(!g)return;resizeImage(g,function(url){F.img=url;F.imgSet=true;$('#p-pic').innerHTML='<div class="pic"><img src="'+url+'" alt="Foto del producto"></div>'})}
 });
-document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('#scrim').hidden)closeSheet()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(!$('#scrim').hidden)closeSheet();else cvClose()}});
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='hidden'){hiddenAt=Date.now();return}
   if(S.settings.pinHash&&hiddenAt&&Date.now()-hiddenAt>30000&&$('#lockscr').hidden){showLock();return}
