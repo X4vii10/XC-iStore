@@ -950,28 +950,25 @@ function sugCard(){
 }
 
 
-/* calculadora de conversión */
-var CUR=[['usd','$ Dólar'],['eur','€ Euro'],['usdt','USDT'],['bs','Bs']];
+/* calculadora de conversión: un solo resultado */
+var CUR=[['bcv','$ BCV'],['euro','€ Euro'],['usdt','USDT'],['bs','Bs']];
+var CNAME={bcv:'dólares a tasa BCV',euro:'euros a tasa euro',usdt:'USDT',bs:'bolívares'};
 function convSheet(){
-  F={kind:'conv',from:'usd'};var r=curRates();
+  F={kind:'conv',from:'bcv',to:'euro'};
   openSheet('Calculadora de conversión','<div class="stack"><div class="field"><label for="cv-amt">Monto</label><input type="text" id="cv-amt" inputmode="decimal" placeholder="0,00" data-live></div>'
-    +'<div class="field"><label>Convertir desde</label>'+seg('cv-from','from',CUR,'usd')+'</div>'
-    +'<div class="prev" id="cv-out"></div>'
-    +'<div class="foot">Tasas del '+dayLabel(r.date).toLowerCase()+': BCV '+fmt(r.bcv)+' · Euro '+fmt(r.euro)+' · USDT '+fmt(r.usdt)+'. Actualízalas en Tasas para convertir con valores de hoy.</div></div>');
+    +'<div class="field"><label>De</label>'+seg('cv-from','from',CUR,'bcv')+'</div>'
+    +'<div class="row" style="justify-content:center"><button class="btn small ghost" data-act="cvswap">⇅ Invertir</button></div>'
+    +'<div class="field"><label>A</label>'+seg('cv-to','to',CUR,'euro')+'</div>'
+    +'<div class="prev" id="cv-out"></div><div class="foot" id="cv-foot"></div></div>');
   updateConv();
 }
 function updateConv(){
-  var r=curRates(),a=num($('#cv-amt').value),f=F.from,rows=[];
-  function L(k,v,bold){rows.push('<div class="l"><span class="muted">'+k+'</span><b class="mono"'+(bold?' style="color:var(--purple)"':'')+'>'+v+'</b></div>')}
-  function D(v){return '$'+fmt(v)}
-  function E(v){return '€'+fmt(v)}
-  function B(v){return 'Bs '+fmt(v)}
+  var r=curRates(),a=num($('#cv-amt').value),f=F.from,t=F.to,R={bcv:r.bcv,euro:r.euro,usdt:r.usdt,bs:1};
   if(!(r.bcv&&r.euro&&r.usdt)){$('#cv-out').innerHTML='<div class="muted">Registra primero las tasas en Tasas.</div>';return}
-  if(f==='usd'){L('Bs a tasa BCV',B(a*r.bcv),1);L('Bs a tasa USDT (Binance)',B(a*r.usdt));L('Euros (tasa BCV)',E(a*r.bcv/r.euro));L('USDT',fmt(a)+' USDT')}
-  else if(f==='eur'){L('Bs a tasa euro',B(a*r.euro),1);L('Dólares (BCV)',D(a*r.euro/r.bcv));L('Dólar real (USDT)',D(a*r.euro/r.usdt));L('USDT',fmt(a*r.euro/r.usdt)+' USDT')}
-  else if(f==='usdt'){L('Bs a tasa USDT',B(a*r.usdt),1);L('Dólares (BCV)',D(a*r.usdt/r.bcv));L('Euros',E(a*r.usdt/r.euro))}
-  else{L('Dólares (BCV)',D(a/r.bcv),1);L('Dólar real / USDT',D(a/r.usdt));L('Euros',E(a/r.euro))}
-  $('#cv-out').innerHTML=rows.join('');
+  var res=a*R[f]/R[t],sym={bcv:'$',euro:'€',usdt:'',bs:'Bs '},suf={usdt:' USDT'};
+  function show(v,k){return (sym[k]||'')+fmt(v)+(suf[k]||'')}
+  $('#cv-out').innerHTML='<div class="muted" style="font-size:13px">'+show(a,f)+' ('+CNAME[f]+') equivalen a</div><div class="num" style="font-size:28px;font-weight:600;color:var(--purple);font-family:var(--f-display)">'+show(res,t)+'</div><div class="muted" style="font-size:13px">'+CNAME[t]+'</div>';
+  $('#cv-foot').textContent=(f===t?'Elegiste la misma moneda en los dos lados. ':'')+'Tasas del '+dayLabel(r.date).toLowerCase()+': BCV '+fmt(r.bcv)+' · Euro '+fmt(r.euro)+' · USDT '+fmt(r.usdt)+'. Pasa por bolívares: monto × tasa de origen ÷ tasa de destino.';
 }
 /* tasas del día */
 UI.auto={ok:false,msg:'Aún no se ha intentado hoy.',log:[]};
@@ -1133,6 +1130,7 @@ var A={
   delexpense:function(t){if(!armed(t))return;del('expenses',t.dataset.id);closeSheet();toast('Gasto eliminado');render()},
   rep:function(t){UI.rep=t.dataset.v;render()},
   conv:function(){convSheet()},
+  cvswap:function(){var x=F.from;F.from=F.to;F.to=x;['from','to'].forEach(function(k){document.querySelectorAll('#cv-'+k+' button').forEach(function(b){b.classList.toggle('on',b.dataset.v===F[k])})});updateConv()},
   adj:function(t){adjSheet(t.dataset.id)},saveadj:saveAdj,
   step:function(t){var i=$('#a-new');i.value=Math.max(0,Math.floor(num(i.value))+(+t.dataset.d));updateAdj()},
   biz:function(){bizSheet()},bizedit:function(t){bizSheet(t.dataset.id)},savebiz:saveBiz,
