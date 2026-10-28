@@ -166,6 +166,13 @@ textarea{min-height:92px;font-family:var(--f-mono);font-size:12px}
 .sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:50;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:99px;font-weight:600;font-size:14px;max-width:90vw}
 @media (max-width:380px){.rates{grid-template-columns:1fr 1fr}.kpi .v{font-size:22px}.three{grid-template-columns:1fr 1fr}}
+.stackbar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--surface2)}
+.stackbar i{display:block;height:100%}
+.sug{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.sug:first-child{border-top:0}
+.sug .d{flex:none;width:8px;height:8px;border-radius:50%;margin-top:7px}
+.sug .st{font-weight:600;font-size:14px;line-height:1.3}
+.sug .ss{color:var(--muted);font-size:13px;line-height:1.35}
 @media (prefers-reduced-motion:no-preference){.btn,.chip,.tab{transition:background .15s,border-color .15s,color .15s}}
 html{-webkit-text-size-adjust:100%}
 body{margin:0}
@@ -260,13 +267,13 @@ function shiftMonth(m,d){var s=m.split('-'),dt=new Date(+s[0],+s[1]-1+d,1);retur
 function nice(v){if(v<=0)return 10;var p=Math.pow(10,Math.floor(Math.log10(v))),f=v/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
 
 /* ---------- estado y almacenamiento (IndexedDB, solo en este navegador) ---------- */
-var STORES=['products','purchases','sales','rates','income','budget','expenses'];
-var S={products:[],purchases:[],sales:[],rates:[],income:[],budget:[],expenses:[],settings:{capitalTarget:100}};
-var UI={tab:'home',period:'week',q:'',persist:true,pm:null,rep:'week',h:{type:'all',range:'30',q:''}};
+var STORES=['products','purchases','sales','rates','income','budget','expenses','bizexp'];
+var S={products:[],purchases:[],sales:[],rates:[],income:[],budget:[],expenses:[],bizexp:[],settings:normSettings()};
+var UI={tab:'home',period:'week',q:'',persist:true,pm:null,rep:'week',sc:'all',sugAll:false,plm:null,h:{type:'all',range:'30',q:''}};
 var db=null;
 
 function openDB(){return new Promise(function(res,rej){
-  try{var r=indexedDB.open('xcstore',2);
+  try{var r=indexedDB.open('xcstore',3);
     r.onupgradeneeded=function(){var d=r.result;STORES.forEach(function(n){if(!d.objectStoreNames.contains(n))d.createObjectStore(n,{keyPath:'id'})});if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'key'})};
     r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)};
   }catch(e){rej(e)}})}
@@ -304,7 +311,7 @@ function health(m){
   var A=sum(inc,'real'),B=sum(exp,'real'),C=0,sav=0,savDone=0;
   S.budget.forEach(function(it){var pr=planReal(it);C+=pr;if(it.kind==='ahorro'){sav+=pr;savDone+=sum(exp.filter(function(e){return e.itemId===it.id}),'real')}});
   var pend=Math.max(0,sav-savDone),free=A-B-pend;
-  var sm=S.sales.filter(function(s){return s.date.slice(0,7)===m}),gain=sum(sm,'profitReal');
+  var sm=S.sales.filter(function(s){return s.date.slice(0,7)===m}),gain=sum(sm,'profitReal')-sum(S.bizexp.filter(function(x){return x.date.slice(0,7)===m}),'real');
   var draws=sum(inc.filter(function(x){return x.source==='Retiro del negocio'}),'real'),gfree=Math.max(0,gain-draws);
   var stockVal=0;S.products.forEach(function(p){stockVal+=pstats(p).value});
   var T=S.settings.capitalTarget||0,falta=Math.max(0,T-stockVal),reinv=Math.min(gfree,falta),retirable=Math.max(0,gfree-reinv);
@@ -344,7 +351,7 @@ function viewHome(){
   var greet=h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches';
   var dstr=new Date().toLocaleDateString('es-VE',{weekday:'long',day:'numeric',month:'long'});
   var age=dayDiff(r.date);
-  var list=S.sales.filter(function(s){return inPeriod(s.date)}),m=metrics(list);
+  var list=S.sales.filter(function(s){return inPeriod(s.date)}),m=addNet(metrics(list),inPeriod);
   var stockVal=0,units=0,low=[];
   S.products.forEach(function(p){var st=pstats(p);stockVal+=st.value;units+=st.stock;if(st.stock<=(p.minStock||0))low.push(p.name+' ('+st.stock+')')});
   var per=[['today','Hoy'],['week','7 días'],['month','Este mes'],['all','Todo']].map(function(x){return '<button class="chip'+(UI.period===x[0]?' on':'')+'" data-act="period" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('');
@@ -369,15 +376,16 @@ function viewHome(){
   +'<div class="row sb wrapr"><h2>Resumen</h2><div class="chips">'+per+'</div></div>'
   +'<div class="kpis">'
     +'<div class="kpi blue"><span class="cap">Ingresos brutos</span><span class="v num">'+usd(m.rev)+'</span></div>'
-    +'<div class="kpi purple"><span class="cap">Ganancia neta</span><span class="v num">'+usd(m.pro)+'</span></div>'
-    +'<div class="kpi"><span class="cap">Margen</span><span class="v num">'+pct(m.margin)+'</span></div>'
+    +'<div class="kpi purple"><span class="cap">Ganancia neta</span><span class="v num">'+usd(m.neta)+'</span></div>'
+    +'<div class="kpi"><span class="cap">Margen neto</span><span class="v num">'+pct(m.netMargin)+'</span></div>'
     +'<div class="kpi"><span class="cap">Ventas</span><span class="v num">'+m.n+'</span></div>'
   +'</div>'
-  +'<div class="foot">Neto = ingresos − costo de lo vendido ('+usd(m.cost)+') − gastos de venta ('+usd(m.extra)+'). Cifras en dólares reales a tasa USDT.</div>'
+  +'<div class="foot">Neto = ingresos − costo de lo vendido ('+usd(m.cost)+') − gastos de venta ('+usd(m.extra)+') − gastos extras del negocio ('+usd(m.bx)+'). Cifras en dólares reales a tasa USDT.</div>'
   +'<section class="card"><div class="row sb"><h3>Últimos 7 días</h3><div class="legend"><span><i class="dot" style="background:var(--blue)"></i>Ingresos</span><span><i class="dot" style="background:var(--purple)"></i>Ganancia</span></div></div><div class="bars">'+bars+'</div></section>'
   +'<section class="card"><div class="row sb"><h3>Finanzas personales</h3>'+healthPill(hl.st)+'</div><p class="muted" style="margin:8px 0 12px;font-size:14px">'+esc(hl.msg)+'</p>'
     +'<div class="three"><div><span class="cap">Ganancia libre</span><span class="num big-n">'+usd(hl.gfree)+'</span></div><div><span class="cap">Reinvertir</span><span class="num big-n" style="color:var(--blue)">'+usd(hl.reinv)+'</span></div><div><span class="cap">Retirable</span><span class="num big-n" style="color:var(--purple)">'+usd(hl.retirable)+'</span></div></div>'
     +'<div class="row" style="margin-top:12px"><button class="btn small ghost" data-act="tab" data-v="personal">Ver detalle</button></div></section>'
+  +splitCard(m)+sugCard()
   +'<section class="card"><div class="row sb"><h3>Inventario</h3><button class="btn small ghost" data-act="tab" data-v="stock">Ver stock</button></div>'
     +'<div class="row" style="gap:24px;margin-top:10px"><div><span class="cap">Capital en stock</span><span class="num big-n">'+usd(stockVal)+'</span></div><div><span class="cap">Unidades</span><span class="num big-n">'+units+'</span></div></div>'
     +(low.length?'<div style="margin-top:12px"><span class="pill warn">Stock bajo</span> <span class="muted" style="font-size:13px">'+esc(low.join(', '))+'</span></div>':'')
@@ -416,11 +424,11 @@ function viewStock(){
     +'<div><span class="cap">Costo unit.</span><span class="num big-n">'+usd(st.avg)+'</span></div>'
     +'<div><span class="cap">Margen</span><span class="num big-n" style="color:var(--purple)">'+pct(mg)+'</span></div></div>'
     +'<div class="foot" style="margin-top:8px">Precio: $'+fmt(p.priceBcv)+' tasa BCV'+(p.priceDiv?' · $'+fmt(p.priceDiv)+' divisa':'')+' · vendidas: '+st.sold+'</div>'
-    +'<div class="row" style="margin-top:12px"><button class="btn small primary" data-act="buy" data-id="'+p.id+'">Registrar compra</button><button class="btn small ghost" data-act="prodedit" data-id="'+p.id+'">Editar</button></div></section>';
+    +'<div class="row wrapr" style="margin-top:12px"><button class="btn small primary" data-act="adj" data-id="'+p.id+'">Editar stock</button><button class="btn small" data-act="buy" data-id="'+p.id+'">Registrar compra</button><button class="btn small ghost" data-act="prodedit" data-id="'+p.id+'">Editar producto</button></div></section>';
   }).join('');
-  return '<div class="row sb"><h2>Stock</h2><button class="btn small" data-act="prodedit">Nuevo producto</button></div>'
+  return '<div class="row sb"><h2>Stock</h2><div class="row wrapr"><button class="btn small ghost" data-act="price">Precios</button><button class="btn small" data-act="prodedit">Nuevo producto</button></div></div>'
   +'<div class="card row" style="gap:24px"><div><span class="cap">Capital en stock</span><span class="num big-n">'+usd(tot)+'</span></div><div><span class="cap">Unidades</span><span class="num big-n">'+units+'</span></div></div>'
-  +'<div class="foot">El costo unitario es el promedio de todas tus compras, convertido a dólar real. El stock inicial es una estimación: corrígelo con una compra o editando el producto. El margen usa la tasa de hoy.</div>'
+  +'<div class="foot">El costo unitario es el promedio de todas tus compras, convertido a dólar real. El stock inicial es una estimación: corrígelo con «Editar stock». El margen usa la tasa de hoy.</div>'
   +(cards||'<div class="empty card"><b>Sin productos</b>Crea tu primer producto para empezar.</div>');
 }
 
@@ -459,8 +467,8 @@ function buckets(mode){
     for(k=7;k>=0;k--){s=new Date(mon);s.setDate(mon.getDate()-7*k);e=new Date(s);e.setDate(s.getDate()+6);arr.push({s:ds(s),e:ds(e),l:pad(s.getDate())+'/'+pad(s.getMonth()+1)})}}
   else{for(k=5;k>=0;k--){s=new Date(now.getFullYear(),now.getMonth()-k,1);e=new Date(now.getFullYear(),now.getMonth()-k+1,0);arr.push({s:ds(s),e:ds(e),l:s.toLocaleDateString('es-VE',{month:'short'}).replace('.','')})}}
   arr.forEach(function(b){
-    var sa=S.sales.filter(function(x){return x.date>=b.s&&x.date<=b.e}),pu=S.purchases.filter(function(x){return !isInitial(x)&&x.date>=b.s&&x.date<=b.e});
-    b.v=sum(sa,'revenueReal');b.i=sum(pu,'totalReal');b.g=sum(sa,'profitReal')});
+    var sa=S.sales.filter(function(x){return x.date>=b.s&&x.date<=b.e}),pu=S.purchases.filter(function(x){return !isInitial(x)&&!x.adjust&&x.date>=b.s&&x.date<=b.e});
+    b.v=sum(sa,'revenueReal');b.i=sum(pu,'totalReal');b.g=sum(sa,'profitReal')-sum(S.bizexp.filter(function(x){return x.date>=b.s&&x.date<=b.e}),'real')});
   return arr;
 }
 function chartSVG(b){
@@ -479,9 +487,9 @@ function viewReports(){
   return '<div class="row sb wrapr"><h2>Reportes</h2><div class="chips"><button class="chip'+(UI.rep==='week'?' on':'')+'" data-act="rep" data-v="week">Semanal</button><button class="chip'+(UI.rep==='month'?' on':'')+'" data-act="rep" data-v="month">Mensual</button></div></div>'
   +'<section class="card"><div class="legend"><span><i class="dot" style="background:var(--blue)"></i>Ventas</span><span><i class="dot" style="background:var(--muted)"></i>Inversión</span><span><i class="dot" style="background:var(--purple)"></i>Ganancia</span></div>'+chartSVG(b)
     +'<div class="scroll-x" style="margin-top:8px"><table><thead><tr><th>'+(UI.rep==='week'?'Semana desde':'Mes')+'</th><th>Ventas</th><th>Inversión</th><th>Ganancia</th></tr></thead><tbody>'+rows+'<tr><td><b>Total</b></td><td><b>'+usd(tv)+'</b></td><td><b>'+usd(ti)+'</b></td><td><b>'+usd(tg)+'</b></td></tr></tbody></table></div>'
-    +'<div class="foot" style="margin-top:8px">Inversión = compras registradas (no incluye el inventario inicial estimado). Dólares reales a tasa USDT.</div></section>'
-  +'<h2>Historial</h2>'
-  +'<div class="chips">'+ch('type','all','Todo')+ch('type','sale','Ventas')+ch('type','buy','Compras')+ch('type','inc','Ingresos')+ch('type','exp','Gastos')+'</div>'
+    +'<div class="foot" style="margin-top:8px">Inversión = compras registradas (no incluye el inventario inicial ni los ajustes). Ganancia = neta, después de gastos extras del negocio. Dólares reales a tasa USDT.</div></section>'
+  +plCard()+'<h2>Historial</h2>'
+  +'<div class="chips">'+ch('type','all','Todo')+ch('type','sale','Ventas')+ch('type','buy','Compras')+ch('type','inc','Ingresos')+ch('type','exp','Gastos')+ch('type','bexp','Negocio')+ch('type','adj','Ajustes')+'</div>'
   +'<div class="chips">'+ch('range','7','7 días')+ch('range','30','30 días')+ch('range','all','Todo')+'</div>'
   +'<div class="field"><input type="text" id="hq" placeholder="Buscar en el historial" value="'+esc(f.q)+'" aria-label="Buscar en el historial"></div>'
   +'<div id="hist" class="stack"></div>';
@@ -489,7 +497,9 @@ function viewReports(){
 function txs(){
   var t=[];
   S.sales.forEach(function(s){t.push({k:'sale',date:s.date,ts:s.createdAt,title:s.name+(s.qty>1?' ×'+s.qty:''),sub:(s.place||'Sin ubicación')+' · '+(s.pay||'—'),amt:s.revenueReal,act:'saledetail',id:s.id})});
-  S.purchases.filter(function(x){return !isInitial(x)}).forEach(function(x){var p=prod(x.productId);t.push({k:'buy',date:x.date,ts:x.createdAt,title:'Compra: '+(p?p.name:'producto')+' ×'+x.qty,sub:'Costo unitario $'+fmt(x.unitNominal),amt:-x.totalReal,act:'buydetail',id:x.id})});
+  S.bizexp.forEach(function(x){t.push({k:'bexp',date:x.date,ts:x.createdAt,title:x.name,sub:x.note||'Gasto del negocio',amt:-x.real,act:'bizedit',id:x.id})});
+  S.purchases.filter(function(x){return x.adjust}).forEach(function(x){var p=prod(x.productId);t.push({k:'adj',date:x.date,ts:x.createdAt,title:'Ajuste: '+(p?p.name:'producto'),sub:(x.note||'').replace('Ajuste de stock: ',''),amt:0,q:(x.qty>0?'+':'')+x.qty+' u.',act:'buydetail',id:x.id})});
+  S.purchases.filter(function(x){return !isInitial(x)&&!x.adjust}).forEach(function(x){var p=prod(x.productId);t.push({k:'buy',date:x.date,ts:x.createdAt,title:'Compra: '+(p?p.name:'producto')+' ×'+x.qty,sub:'Costo unitario $'+fmt(x.unitNominal),amt:-x.totalReal,act:'buydetail',id:x.id})});
   S.income.forEach(function(x){t.push({k:'inc',date:x.date,ts:x.createdAt,title:x.source,sub:x.note||'Ingreso personal',amt:x.real,act:'incomeedit',id:x.id})});
   S.expenses.forEach(function(x){t.push({k:'exp',date:x.date,ts:x.createdAt,title:x.name,sub:x.note||'Gasto personal',amt:-x.real,act:'expenseedit',id:x.id})});
   return t;
@@ -499,9 +509,9 @@ function renderHist(){
   var list=txs().filter(function(x){return (f.type==='all'||x.k===f.type)&&(f.range==='all'||dayDiff(x.date)<=+f.range)&&(!q||(x.title+' '+x.sub).toLowerCase().indexOf(q)>=0)})
     .sort(function(a,b){return a.date===b.date?b.ts-a.ts:(a.date<b.date?1:-1)});
   if(!list.length){el.innerHTML='<div class="empty card"><b>Sin movimientos</b>Cambia los filtros o registra algo nuevo.</div>';return}
-  var lab={sale:['Venta','blue'],buy:['Compra',''],inc:['Ingreso','good'],exp:['Gasto','warn']},html='<div class="card"><div class="list">',last='';
+  var lab={sale:['Venta','blue'],buy:['Compra',''],inc:['Ingreso','good'],exp:['Gasto','warn'],bexp:['Negocio','warn'],adj:['Ajuste','']},html='<div class="card"><div class="list">',last='';
   list.forEach(function(x){if(x.date!==last){html+='<div class="dayh">'+dayLabel(x.date)+'</div>';last=x.date}
-    html+='<button class="item" data-act="'+x.act+'" data-id="'+x.id+'"><div class="grow"><div class="t">'+esc(x.title)+'</div><div class="s">'+esc(x.sub)+'</div></div><div class="r"><span class="pill '+lab[x.k][1]+'">'+lab[x.k][0]+'</span><div class="mono" style="margin-top:4px">'+(x.amt<0?'-':'+')+usd(Math.abs(x.amt))+'</div></div></button>'});
+    html+='<button class="item" data-act="'+x.act+'" data-id="'+x.id+'"><div class="grow"><div class="t">'+esc(x.title)+'</div><div class="s">'+esc(x.sub)+'</div></div><div class="r"><span class="pill '+lab[x.k][1]+'">'+lab[x.k][0]+'</span><div class="mono" style="margin-top:4px">'+(x.q!=null?x.q:(x.amt<0?'-':'+')+usd(Math.abs(x.amt)))+'</div></div></button>'});
   el.innerHTML=html+'</div></div>';
 }
 
@@ -610,7 +620,8 @@ function saveBuy(){
 function buyDetail(id){
   var x=S.purchases.find(function(y){return y.id===id});if(!x)return;var p=prod(x.productId);F={kind:'detail',id:id};
   var rows=[['Producto',esc(p?p.name:'—')],['Fecha',dayLabel(x.date)],['Unidades',x.qty],['Total pagado','$'+fmt(x.totalNominal)+' a '+(x.basis==='euro'?'tasa euro':x.basis==='bcv'?'tasa BCV':'divisa')],['Costo unitario','$'+fmt(x.unitNominal)],['Total en dólar real',usd(x.totalReal)]];
-  openSheet('Detalle de compra','<div class="stack"><div class="prev">'+rows.map(function(r){return '<div class="l"><span class="muted">'+r[0]+'</span><span class="mono">'+r[1]+'</span></div>'}).join('')+'</div><div class="err" id="d-err"></div><button class="btn danger block" data-act="delbuy" data-id="'+id+'">Eliminar compra</button></div>');
+  if(x.adjust)rows=[['Producto',esc(p?p.name:'—')],['Fecha',dayLabel(x.date)],['Ajuste',(x.qty>0?'+':'')+x.qty+' u.'],['Motivo',esc((x.note||'').replace('Ajuste de stock: ',''))],['Valor a costo',usd(x.totalReal)]];
+  openSheet(x.adjust?'Detalle de ajuste':'Detalle de compra','<div class="stack"><div class="prev">'+rows.map(function(r){return '<div class="l"><span class="muted">'+r[0]+'</span><span class="mono">'+r[1]+'</span></div>'}).join('')+'</div><div class="err" id="d-err"></div><button class="btn danger block" data-act="delbuy" data-id="'+id+'">'+(x.adjust?'Eliminar ajuste':'Eliminar compra')+'</button></div>');
 }
 
 function prodSheet(id){
@@ -704,6 +715,236 @@ function saveExpense(){
   var r=curRates(),old=F.id?S.expenses.find(function(y){return y.id===F.id}):null;
   put('expenses',{id:F.id||uid(),date:$('#e-date').value||today(),itemId:it.id,name:it.name,amount:amt,currency:F.cur,real:old&&old.currency===F.cur&&old.amount===amt?old.real:toRealCur(amt,F.cur,r),note:$('#e-note').value.trim(),createdAt:old?old.createdAt:Date.now()});
   closeSheet();toast('Gasto guardado');render();
+}
+
+/* ---------- v3: ajuste de stock, gastos del negocio, reparto, estado de resultados, calculadora y sugerencias ---------- */
+var PL={today:'hoy',week:'últimos 7 días',month:'este mes',all:'todo el tiempo'};
+function normSettings(x){x=x||{};var s=Object.assign({capitalTarget:100,cash:0,goal:5000,lastBackup:''},x);
+  var sp=x.split;s.split=(sp&&isFinite(+sp.n)&&isFinite(+sp.p)&&isFinite(+sp.a))?{n:+sp.n,p:+sp.p,a:+sp.a}:{n:50,p:30,a:20};return s}
+function bxIn(fn){return sum(S.bizexp.filter(function(x){return fn(x.date)}),'real')}
+function addNet(m,fn){m.bx=bxIn(fn);m.neta=m.pro-m.bx;m.netMargin=m.rev?m.neta/m.rev:0;return m}
+function splitAmts(neta){var s=S.settings.split,b=Math.max(0,neta);return {n:b*s.n/100,p:b*s.p/100,a:b*s.a/100}}
+function goalProgress(){var mo={};S.sales.forEach(function(s){var k=s.date.slice(0,7);mo[k]=(mo[k]||0)+s.profitReal});S.bizexp.forEach(function(x){var k=x.date.slice(0,7);mo[k]=(mo[k]||0)-x.real});
+  var t=0;Object.keys(mo).forEach(function(k){if(mo[k]>0)t+=mo[k]});return t*S.settings.split.a/100}
+
+function splitCard(m){
+  var rev=m.rev,cost=m.cost,ext=m.extra,bx=m.bx,neta=m.neta,sp=S.settings.split,am=splitAmts(neta);
+  var draws=sum(S.income.filter(function(x){return x.source==='Retiro del negocio'&&inPeriod(x.date)}),'real');
+  function p(v){return rev>0?Math.max(0,v/rev*100):0}
+  var seg=[['var(--muted)',cost],['var(--warn)',ext+bx],['var(--purple)',Math.max(neta,0)]];
+  var bar=rev>0?'<div class="stackbar" role="img" aria-label="Composición de tus ingresos">'+seg.map(function(x){return '<i style="width:'+p(x[1])+'%;background:'+x[0]+'"></i>'}).join('')+'</div>'
+    +'<div class="legend" style="margin-top:8px"><span><i class="dot" style="background:var(--muted)"></i>Costo '+fmt(p(cost),0)+'%</span><span><i class="dot" style="background:var(--warn)"></i>Gastos '+fmt(p(ext+bx),0)+'%</span><span><i class="dot" style="background:var(--purple)"></i>Neta '+fmt(rev>0?neta/rev*100:0,0)+'%</span></div>':'';
+  var gp=goalProgress(),goal=S.settings.goal||0,gw=goal?Math.min(100,gp/goal*100):0;
+  return '<section class="card stack"><div class="row sb"><h3>¿Cómo se reparte tu ganancia?</h3><span class="pill">'+PL[UI.period]+'</span></div>'
+    +(rev>0?bar:'<p class="muted" style="margin:0;font-size:14px">Cuando registres ventas verás aquí cuánto se va en costos, gastos y cuánto te queda.</p>')
+    +'<div class="three"><div><span class="cap">Ganancia neta</span><span class="num big-n" style="color:var(--purple)">'+usd(neta)+'</span></div><div><span class="cap">Gastos extras</span><span class="num big-n">'+usd(bx)+'</span></div><div><span class="cap">% de ingresos</span><span class="num big-n">'+fmt(rev>0?bx/rev*100:0,0)+'%</span></div></div>'
+    +(neta>0?'<div class="prev"><div class="l"><span class="muted">Negocio ('+sp.n+'%) · reinvertir</span><b class="mono">'+usd(am.n)+'</b></div><div class="l"><span class="muted">Personal ('+sp.p+'%) · tu sueldo</span><b class="mono">'+usd(am.p)+'</b></div><div class="l"><span class="muted">Ahorro / marca propia ('+sp.a+'%)</span><b class="mono">'+usd(am.a)+'</b></div>'
+      +'<div class="l"><span class="muted">Ya retiraste del negocio</span><b class="mono">'+usd(draws)+'</b></div></div>':'<div class="foot">Con ganancia neta positiva te muestro cómo repartirla entre negocio, personal y ahorro.</div>')
+    +'<div><div class="row sb"><span class="cap">Meta: producto propio</span><span class="mono" style="font-size:13px">'+usd(gp)+' / '+usd(goal)+'</span></div><div class="meter"><i style="width:'+gw+'%"></i></div></div>'
+    +'<div class="row wrapr"><button class="btn small" data-act="biz">Gasto del negocio</button><button class="btn small ghost" data-act="split">Cambiar porcentajes</button></div></section>';
+}
+function splitSheet(){
+  var s=S.settings.split;F={kind:'split'};
+  openSheet('Porcentajes de ganancia','<div class="stack"><p class="muted" style="margin:0;font-size:14px">Define cómo repartes tu ganancia neta. Deben sumar 100%.</p>'
+    +'<div class="three"><div class="field"><label for="sp-n">Negocio %</label><input type="text" id="sp-n" inputmode="numeric" value="'+s.n+'" data-live></div><div class="field"><label for="sp-p">Personal %</label><input type="text" id="sp-p" inputmode="numeric" value="'+s.p+'" data-live></div><div class="field"><label for="sp-a">Ahorro %</label><input type="text" id="sp-a" inputmode="numeric" value="'+s.a+'" data-live></div></div>'
+    +'<div class="field"><label for="sp-g">Meta para tu producto propio ($)</label><input type="text" id="sp-g" inputmode="decimal" value="'+inp(S.settings.goal||0)+'"></div>'
+    +'<div class="prev" id="sp-prev"></div><div class="err" id="sp-err"></div><button class="btn primary block" data-act="savesplit">Guardar</button></div>');
+  updateSplit();
+}
+function updateSplit(){var t=num($('#sp-n').value)+num($('#sp-p').value)+num($('#sp-a').value);
+  $('#sp-prev').innerHTML='<div class="l"><span class="muted">Suma</span><b class="mono" style="color:'+(Math.round(t)===100?'var(--good)':'var(--bad)')+'">'+fmt(t,0)+'%</b></div>'}
+function saveSplit(){var n=num($('#sp-n').value),p=num($('#sp-p').value),a=num($('#sp-a').value);
+  if(n<0||p<0||a<0||Math.round(n+p+a)!==100){$('#sp-err').textContent='Los tres porcentajes deben sumar 100%.';return}
+  S.settings.split={n:n,p:p,a:a};S.settings.goal=num($('#sp-g').value);saveSettings();closeSheet();toast('Porcentajes guardados');render()}
+
+/* gastos extras del negocio */
+var BIZ=['Publicidad','Empaques','Transporte','Internet y teléfono','Herramientas','Comisiones','Otro'];
+function bizSheet(id){
+  var x=id?S.bizexp.find(function(y){return y.id===id}):null;F={kind:'biz',id:id||null,cur:x?x.currency:'usd'};
+  openSheet(x?'Editar gasto del negocio':'Gasto del negocio','<div class="stack"><div class="field"><label for="x-name">Concepto</label><input type="text" id="x-name" list="bizl" placeholder="Publicidad, empaques..." value="'+esc(x?x.name:'')+'"><datalist id="bizl">'+BIZ.map(function(b){return '<option value="'+b+'">'}).join('')+'</datalist></div>'
+    +'<div class="two"><div class="field"><label for="x-amt">Monto</label><input type="text" id="x-amt" inputmode="decimal" value="'+(x?inp(x.amount):'')+'"></div><div class="field"><label for="x-date">Fecha</label><input type="date" id="x-date" value="'+(x?x.date:today())+'"></div></div>'
+    +'<div class="field"><label>Moneda</label>'+curSeg('x-cur','cur',F.cur)+'</div>'
+    +'<div class="field"><label for="x-note">Nota</label><input type="text" id="x-note" value="'+esc(x?x.note||'':'')+'"></div>'
+    +'<div class="foot">Son gastos del negocio que no son mercancía (publicidad, empaques, internet...). Bajan tu ganancia neta.</div><div class="err" id="x-err"></div>'
+    +'<button class="btn primary block" data-act="savebiz">Guardar gasto</button>'+(x?'<button class="btn danger block" data-act="delbiz" data-id="'+x.id+'">Eliminar gasto</button>':'')+'</div>');
+}
+function saveBiz(){
+  var name=$('#x-name').value.trim(),amt=num($('#x-amt').value),err=$('#x-err');
+  if(!name){err.textContent='Escribe el concepto.';return}
+  if(amt<=0){err.textContent='Escribe el monto.';return}
+  var r=curRates();if(F.cur==='bs'&&!r.usdt&&!r.bcv){err.textContent='Registra primero la tasa en Tasas.';return}
+  var old=F.id?S.bizexp.find(function(y){return y.id===F.id}):null;
+  put('bizexp',{id:F.id||uid(),date:$('#x-date').value||today(),name:name,amount:amt,currency:F.cur,real:old&&old.currency===F.cur&&old.amount===amt?old.real:toRealCur(amt,F.cur,r),note:$('#x-note').value.trim(),createdAt:old?old.createdAt:Date.now()});
+  closeSheet();toast('Gasto guardado');render();
+}
+
+/* editar stock (conteo físico, merma, regalo). No es compra ni venta: no toca inversión, ingresos ni costo promedio */
+function adjSheet(id){
+  var p=prod(id);if(!p)return;var st=pstats(p);F={kind:'adj',id:id};
+  openSheet('Editar stock','<div class="stack"><div class="row">'+pic(p,true)+'<div class="grow"><b>'+esc(p.name)+'</b><div class="muted" style="font-size:13px">En el sistema: '+st.stock+' u. · costo '+usd(st.avg)+'</div></div></div>'
+    +'<div class="field"><label for="a-new">Stock real (lo que tienes ahora)</label><div class="row"><button class="btn" data-act="step" data-d="-1" aria-label="Restar uno">−</button><div class="grow"><input type="text" id="a-new" inputmode="numeric" value="'+st.stock+'" data-live style="text-align:center"></div><button class="btn" data-act="step" data-d="1" aria-label="Sumar uno">+</button></div></div>'
+    +'<div class="field"><label for="a-why">Motivo</label><select id="a-why"><option>Conteo físico</option><option>Daño o merma</option><option>Regalo o muestra</option><option>Corrección de inventario inicial</option><option>Otro</option></select></div>'
+    +'<div class="prev" id="a-prev"></div><div class="foot">Esto no cuenta como compra ni venta: no cambia tu inversión, tus ingresos ni tu costo promedio. Si compraste mercancía nueva, usa «Registrar compra».</div><div class="err" id="a-err"></div>'
+    +'<button class="btn primary block" data-act="saveadj">Guardar stock</button></div>');
+  updateAdj();
+}
+function adjCalc(){var p=prod(F.id),st=pstats(p),raw=$('#a-new').value.trim(),nw=Math.floor(num(raw));return {p:p,st:st,nw:nw,diff:nw-st.stock,bad:raw===''||nw<0}}
+function updateAdj(){var c=adjCalc();
+  $('#a-prev').innerHTML='<div class="l"><span class="muted">Diferencia</span><b class="mono">'+(c.diff>0?'+':'')+c.diff+' u.</b></div><div class="l"><span class="muted">Valor a costo</span><b class="mono">'+usd(c.diff*c.st.avg)+'</b></div>'}
+function saveAdj(){
+  var c=adjCalc(),err=$('#a-err');if(c.bad){err.textContent='Escribe el stock real (0 o más).';return}
+  if(!c.diff){closeSheet();toast('Sin cambios');return}
+  var v=c.diff*c.st.avg;
+  put('purchases',{id:uid(),date:today(),productId:c.p.id,qty:c.diff,totalNominal:v,basis:'usd',unitNominal:c.st.avg,totalReal:v,rates:curRates(),note:'Ajuste de stock: '+$('#a-why').value,adjust:true,createdAt:Date.now()});
+  closeSheet();toast('Stock actualizado');render();
+}
+
+/* calculadora de precios */
+function priceSheet(id){
+  if(!S.products.length){toast('Primero crea un producto');return}
+  F={kind:'price'};
+  openSheet('Calculadora de precios','<div class="stack"><div class="field"><label for="pr-prod">Producto</label><select id="pr-prod" data-live>'+prodOpts(id)+'</select></div>'
+    +'<div class="two"><div class="field"><label for="pr-cost">Costo unitario ($ real)</label><input type="text" id="pr-cost" inputmode="decimal" data-live></div><div class="field"><label for="pr-mg">Margen deseado (%)</label><input type="text" id="pr-mg" inputmode="numeric" value="40" data-live></div></div>'
+    +'<div class="field"><label for="pr-ex">Gasto por venta ($): delivery, empaque</label><input type="text" id="pr-ex" inputmode="decimal" value="0" data-live></div>'
+    +'<div class="prev" id="pr-prev"></div><div class="err" id="pr-err"></div><button class="btn primary block" data-act="applyprice">Aplicar estos precios al producto</button></div>');
+  priceDefaults();
+}
+function priceDefaults(){var p=prod($('#pr-prod').value);if(!p)return;$('#pr-cost').value=inp(pstats(p).avg);updatePrice()}
+function priceCalc(){
+  var p=prod($('#pr-prod').value),r=curRates(),cost=num($('#pr-cost').value),mg=Math.min(90,Math.max(0,num($('#pr-mg').value))),ex=num($('#pr-ex').value);
+  if(!p)return null;var real=(cost+ex)/(1-mg/100),bcv=Math.ceil(real*(realRate(r)/(r.bcv||realRate(r)))*2)/2,div=Math.ceil(real*2)/2,got=toReal(bcv,'bcv',r)-cost-ex;
+  return {p:p,r:r,cost:cost,mg:mg,bcv:bcv,div:div,got:got,gotPct:bcv?got/toReal(bcv,'bcv',r):0,curMg:toReal(p.priceBcv,'bcv',r)?(toReal(p.priceBcv,'bcv',r)-cost-ex)/toReal(p.priceBcv,'bcv',r):0};
+}
+function updatePrice(){var c=priceCalc();if(!c)return;
+  $('#pr-prev').innerHTML='<div class="l"><span class="muted">Precio a tasa BCV</span><b class="mono">$'+fmt(c.bcv)+' · Bs '+fmt(c.bcv*(c.r.bcv||0))+'</b></div><div class="l"><span class="muted">Precio en divisa</span><b class="mono">$'+fmt(c.div)+'</b></div>'
+    +'<div class="l"><span class="muted">Ganancia por unidad</span><b class="mono" style="color:var(--purple)">'+usd(c.got)+' ('+pct(c.gotPct)+')</b></div><div class="l"><span class="muted">Con tu precio actual ($'+fmt(c.p.priceBcv)+')</span><b class="mono">'+pct(c.curMg)+'</b></div>'}
+function applyPrice(){var c=priceCalc();if(!c||c.cost<=0){$('#pr-err').textContent='Escribe el costo unitario.';return}
+  var o=Object.assign({},c.p,{priceBcv:c.bcv,priceDiv:c.div});put('products',o);closeSheet();toast('Precios actualizados');render()}
+
+/* estado de resultados mensual */
+function plData(m){
+  var sa=S.sales.filter(function(s){return s.date.slice(0,7)===m}),bz=S.bizexp.filter(function(x){return x.date.slice(0,7)===m});
+  var rev=sum(sa,'revenueReal'),cost=sum(sa,'costReal'),ext=sum(sa,'extraReal'),bx=sum(bz,'real'),gross=rev-cost,contrib=rev?(rev-cost-ext)/rev:0,neta=rev-cost-ext-bx,by={};
+  sa.forEach(function(s){var o=by[s.productId]||(by[s.productId]={name:s.name,q:0,rev:0,pro:0});o.q+=s.qty;o.rev+=s.revenueReal;o.pro+=s.profitReal});
+  var top=Object.keys(by).map(function(k){return by[k]}).sort(function(a,b){return b.pro-a.pro});
+  return {sa:sa,bz:bz,rev:rev,cost:cost,ext:ext,bx:bx,gross:gross,neta:neta,n:sa.length,ticket:sa.length?rev/sa.length:0,be:contrib>0?bx/contrib:null,top:top,netMargin:rev?neta/rev:0,grossMargin:rev?gross/rev:0};
+}
+function plCard(){
+  var m=UI.plm||today().slice(0,7),d=plData(m),am=splitAmts(d.neta),sp=S.settings.split;
+  function L(a,b,st){return '<div class="l"><span class="muted">'+a+'</span><b class="mono"'+(st?' style="'+st+'"':'')+'>'+b+'</b></div>'}
+  var be=d.bx>0?(d.be==null?L('Punto de equilibrio','sin margen'):L('Punto de equilibrio','vender '+usd(d.be)+' ('+fmt(Math.min(999,d.be?d.rev/d.be*100:0),0)+'% logrado)')):'';
+  return '<section class="card stack"><div class="row sb"><h3>Estado de resultados</h3><div class="row" style="gap:4px"><button class="icon-btn" data-act="plm" data-d="-1" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button><button class="icon-btn" data-act="plm" data-d="1" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></button></div></div>'
+    +'<b style="text-transform:capitalize">'+esc(monthLabel(m))+'</b>'
+    +'<div class="prev">'+L('Ingresos',usd(d.rev))+L('− Costo de lo vendido',usd(d.cost))+L('= Utilidad bruta',usd(d.gross)+' ('+pct(d.grossMargin)+')')+L('− Gastos de venta',usd(d.ext))+L('− Gastos extras del negocio',usd(d.bx))+L('= Ganancia neta',usd(d.neta)+' ('+pct(d.netMargin)+')','color:var(--purple)')+'</div>'
+    +'<div class="prev">'+L('Ventas / ticket promedio',d.n+' · '+usd(d.ticket))+be
+    +(d.neta>0?L('Negocio '+sp.n+'% · Personal '+sp.p+'% · Ahorro '+sp.a+'%',usd(am.n)+' · '+usd(am.p)+' · '+usd(am.a)):'')+'</div>'
+    +(d.top.length?'<div class="foot">Más rentables: '+d.top.slice(0,3).map(function(t){return esc(t.name)+' ('+usd(t.pro)+')'}).join(' · ')+'</div>':'')
+    +(d.bz.length?'<div class="list">'+d.bz.sort(function(a,b){return a.date<b.date?1:-1}).map(function(x){return '<button class="item" data-act="bizedit" data-id="'+x.id+'"><div class="grow"><div class="t">'+esc(x.name)+'</div><div class="s">'+fdate(x.date)+(x.note?' · '+esc(x.note):'')+'</div></div><div class="r mono">'+usd(x.real)+'</div></button>'}).join('')+'</div>':'')
+    +'<div class="row wrapr"><button class="btn small" data-act="biz">Gasto del negocio</button><button class="btn small ghost" data-act="copypl">Copiar resumen</button></div></section>';
+}
+function plText(){
+  var m=UI.plm||today().slice(0,7),d=plData(m),am=splitAmts(d.neta),sp=S.settings.split;
+  return ['XC iStore · Estado de resultados · '+monthLabel(m),'Ingresos: '+usd(d.rev),'Costo de lo vendido: -'+usd(d.cost),'Utilidad bruta: '+usd(d.gross)+' ('+pct(d.grossMargin)+')','Gastos de venta: -'+usd(d.ext),'Gastos extras del negocio: -'+usd(d.bx),'Ganancia neta: '+usd(d.neta)+' ('+pct(d.netMargin)+')',
+    'Ventas: '+d.n+' · Ticket promedio: '+usd(d.ticket)].concat(d.be!=null&&d.bx>0?['Punto de equilibrio: '+usd(d.be)]:[]).concat(d.neta>0?['Reparto: negocio '+usd(am.n)+' ('+sp.n+'%) · personal '+usd(am.p)+' ('+sp.p+'%) · ahorro '+usd(am.a)+' ('+sp.a+'%)']:[]).concat(d.top.length?['Más rentables: '+d.top.slice(0,3).map(function(t){return t.name+' '+usd(t.pro)}).join(', ')]:[]).concat(['Cifras en dólar real (tasa USDT).']).join('\n');
+}
+
+/* sugerencias: cambian con tu dinero, tu stock y tus ventas */
+function ctx(){
+  var r=curRates(),mon=today().slice(0,7),T={r:r,age:dayDiff(r.date)};
+  var s30=S.sales.filter(function(s){return dayDiff(s.date)<=29});
+  T.rows=S.products.map(function(p){var st=pstats(p),ps=s30.filter(function(s){return s.productId===p.id}),sold=sum(ps,'qty'),v=sold/30,pr=toReal(p.priceBcv,'bcv',r);
+    return {p:p,st:st,sold:sold,rev:sum(ps,'revenueReal'),v:v,cover:v>0?st.stock/v:null,mg:pr?(pr-st.avg)/pr:0,min:p.minStock||0}});
+  T.s30=s30;T.rev30=sum(s30,'revenueReal');
+  var sm=S.sales.filter(function(s){return s.date.slice(0,7)===mon});
+  T.rev=sum(sm,'revenueReal');T.pro=sum(sm,'profitReal');T.bx=sum(S.bizexp.filter(function(x){return x.date.slice(0,7)===mon}),'real');T.neta=T.pro-T.bx;T.n=sm.length;T.ext=sum(sm,'extraReal');
+  T.stockVal=T.rows.reduce(function(t,x){return t+x.st.value},0);
+  return T;
+}
+function restockPlan(T,money){
+  var budget=money*.9,left=budget,out=[];
+  T.rows.map(function(x){var cost=x.st.avg||toReal(x.p.priceBcv,'bcv',T.r)*.5,target=Math.max(x.min+2,Math.ceil(x.v*21));
+    return {x:x,cost:cost,need:target-x.st.stock,hot:x.st.stock<=x.min||(x.cover!=null&&x.cover<21),score:(x.st.stock<=0?1e3:0)+(x.cover!=null&&x.cover<14?500:0)+x.v*Math.max(x.mg,.05)*100}})
+  .filter(function(k){return k.hot&&k.need>0&&k.cost>0}).sort(function(a,b){return b.score-a.score})
+  .forEach(function(k){var q=Math.min(k.need,Math.floor(left/k.cost));if(q>0){out.push({p:k.x.p,q:q,cost:q*k.cost});left-=q*k.cost}});
+  return {items:out,left:money-(budget-left)};
+}
+var TIPS=['Graba hoy un video corto solo con manos: unboxing de tu producto estrella.','Responde WhatsApp en menos de 5 minutos: cierras más ventas.','Pídeles una foto o reseña a tus últimos 3 clientes.','Sube el stock disponible a tus estados de WhatsApp.','Ofrece un combo (forro + cargador) con un pequeño descuento.','Anota cada venta el mismo día, así tus números siempre son reales.','Pregunta a tus clientes qué producto les gustaría: ideas para tu marca propia.','Compara dos proveedores antes de tu próxima compra.','Revisa los precios de la competencia en Marketplace esta semana.','Usa luz natural para las fotos: se ve más premium.','Dedica un día fijo a grabar varios videos de una vez.','Fija un día de entregas en tu zona más frecuente.','Guarda los comprobantes de tus compras a proveedores.','Cuando cambie la tasa, revisa tus precios con la calculadora.','Haz un respaldo semanal en Tasas y respaldo.','Termina cada día revisando qué producto se vendió más.'];
+function suggest(){
+  var T=ctx(),L=[],cash=S.settings.cash||0,hr=new Date().getHours(),dom=new Date().getDate(),h=health(today().slice(0,7)),sp=S.settings.split,hasSales=S.sales.length>0;
+  function add(c,k,w,t,s){L.push({c:c,k:k,w:w,t:t,s:s})}
+  T.rows.forEach(function(x){var n=x.p.name,st=x.st;
+    if(st.stock<=0)add('stock','bad',95,'Agotado: '+n,x.sold?'Vendiste '+x.sold+' en 30 días. Repón pronto.':'Sin unidades. Repón si aún lo vendes.');
+    else if(st.stock<=x.min)add('stock','warn',80,'Stock bajo: '+n+' ('+st.stock+')',x.cover!=null?'Te dura ~'+Math.max(1,Math.round(x.cover))+' días a tu ritmo.':'Considera reponer.');
+    else if(x.cover!=null&&x.cover<10)add('stock','warn',62,n+' se acaba en ~'+Math.round(x.cover)+' días','Vendes '+fmt(x.v*7,1)+' por semana. Planifica la compra.');
+    else if(x.sold===0&&st.stock>=3&&hasSales)add('stock','info',40,n+' no se movió en 30 días','Haz un combo o promo; no compres más por ahora.');
+    else if(x.cover!=null&&x.cover>90&&st.stock>6)add('stock','info',35,'Mucho stock de '+n+' (~'+Math.round(x.cover)+' días)','Evita comprar más; ofrécelo en combo.');
+    if(st.avg>0&&st.stock>0&&x.mg<.25)add('stock','warn',55,'Margen bajo en '+n+' ('+pct(x.mg)+')','Sube el precio o negocia el costo. Usa la calculadora.');
+    else if(st.avg>0&&x.mg>=.6&&x.sold>0)add('stock','good',28,n+' deja '+pct(x.mg)+' de margen','Es tu mejor negocio: muéstralo más en tus videos.');
+  });
+  var idle=T.rows.filter(function(x){return x.sold===0}).reduce(function(t,x){return t+x.st.value},0);
+  if(hasSales&&T.stockVal>0&&idle/T.stockVal>.3)add('stock','warn',50,pct(idle/T.stockVal)+' de tu inventario no rota','Tienes '+usd(idle)+' parados. Muévelos con promos.');
+  if(T.stockVal<S.settings.capitalTarget)add('stock','warn',70,'Capital en stock: '+usd(T.stockVal)+' de '+usd(S.settings.capitalTarget),'Reinvierte antes de retirar dinero.');
+  else add('stock','good',20,'Tu capital de trabajo está completo','Ya puedes retirar parte de tu ganancia.');
+  var top=T.rows.slice().sort(function(a,b){return b.rev-a.rev})[0];
+  if(top&&T.rev30>0&&T.s30.length>=5&&top.rev/T.rev30>.5)add('ventas','info',45,pct(top.rev/T.rev30)+' de tus ventas vienen de '+top.p.name,'Depender de uno es riesgoso: impulsa otro producto.');
+  /* dinero */
+  if(!cash)add('dinero','info',92,'Escribe cuánto dinero tienes hoy','Así te armo un plan de compra a tu medida.');
+  else{
+    var plan=restockPlan(T,cash),res=cash*.1;
+    if(cash<20)add('dinero','warn',88,'Poco dinero ('+usd(cash)+'): enfócate','Compra solo tu producto que más rota. No abras líneas nuevas.');
+    else if(cash<60)add('dinero','info',84,'Con '+usd(cash)+': repón lo que se agota','Un solo producto estrella rinde más que varios a medias.');
+    else if(cash<150)add('dinero','info',84,'Con '+usd(cash)+': 70% reponer, 20% probar, 10% reserva','Prueba un producto nuevo en cantidad pequeña (2–3 u.).');
+    else if(cash<500)add('dinero','info',84,'Con '+usd(cash)+': diversifica con cabeza','~60% en estrellas, 20% en contenido y empaque, 20% reserva.');
+    else add('dinero','good',84,'Con '+usd(cash)+': piensa en tu marca','Aparta ~10% ('+usd(cash*.1)+') para un prototipo y negocia precio por volumen.');
+    if(plan.items.length)add('dinero','good',86,'Plan de reposición con '+usd(cash),plan.items.map(function(i){return i.q+'× '+i.p.name.split(' (')[0]+' ('+usd(i.cost)+')'}).join(' · ')+'. Sobran '+usd(plan.left)+'.');
+    else add('dinero','good',60,'Tu stock está cubierto','Usa tu dinero para contenido, empaques o probar un producto nuevo.');
+    add('dinero','info',50,'Deja una reserva de ~'+usd(res),'El 10% sin invertir te cubre imprevistos y cambios de tasa.');
+    if(cash<T.stockVal*.15&&T.stockVal>0)add('dinero','info',30,'Tu efectivo es poco frente al inventario','Vende lo que rota rápido para recuperar liquidez.');
+  }
+  /* ventas */
+  var last7=S.sales.filter(function(s){return dayDiff(s.date)<=6}).length;
+  if(hasSales&&!last7)add('ventas','warn',65,'7 días sin ventas','Publica una oferta en WhatsApp y escribe a tus clientes anteriores.');
+  if(hasSales&&hr>=14&&!S.sales.some(function(s){return s.date===today()}))add('ventas','info',40,'Aún sin ventas hoy','Un estado de WhatsApp con tu producto estrella a esta hora funciona.');
+  if(T.n>=3&&T.rev>0){var nm=T.neta/T.rev;
+    if(T.neta<0)add('ventas','bad',90,'Este mes vas en negativo ('+usd(T.neta)+')','Revisa gastos extras y márgenes bajos.');
+    else if(nm<.15)add('ventas','warn',60,'Margen neto bajo ('+pct(nm)+')','Sube precios, combos o baja gastos de venta.');
+    else if(nm>=.3)add('ventas','good',25,'Margen neto sólido ('+pct(nm)+')','Mantén esos precios y reinvierte.');
+    if(T.ext/T.rev>.08)add('ventas','warn',45,'El delivery se come '+pct(T.ext/T.rev)+' de tus ingresos','Cobra envío o fija un mínimo de compra.');
+    var tk=T.rev/T.n;if(tk<8)add('ventas','info',35,'Ticket promedio bajo ('+usd(tk)+')','Ofrece combos: forro + cable o cargador.');
+  }
+  if(T.bx>0&&T.pro>0&&T.bx/T.pro>.2)add('ventas','warn',55,'Gastos extras: '+pct(T.bx/T.pro)+' de tu ganancia','Revisa cuáles te traen ventas y recorta el resto.');
+  var cm=T.rev?(T.rev-sum(S.sales.filter(function(s){return s.date.slice(0,7)===today().slice(0,7)}),'costReal')-T.ext)/T.rev:0;
+  if(T.bx>0&&cm>0&&T.rev<T.bx/cm)add('ventas','info',50,'Te faltan '+usd(T.bx/cm-T.rev)+' en ventas para cubrir gastos extras','Es tu punto de equilibrio de este mes.');
+  var places={},pays={};S.sales.forEach(function(s){if(s.place)places[s.place]=(places[s.place]||0)+1;if(s.pay)pays[s.pay]=(pays[s.pay]||0)+1});
+  function mx(o){return Object.keys(o).sort(function(a,b){return o[b]-o[a]})[0]}
+  var pl=mx(places);if(pl&&S.sales.length>=6&&places[pl]/S.sales.length>.4)add('ventas','info',25,'Tu zona fuerte es '+pl,'Agrupa entregas allí y ahorra en delivery.');
+  var py=mx(pays);if(py&&S.sales.length>=6&&pays[py]/S.sales.length>.5)add('ventas','info',22,'Te pagan sobre todo con '+py,'Ten ese método siempre listo y visible.');
+  if(T.r.bcv&&T.r.usdt&&(T.r.usdt-T.r.bcv)/T.r.bcv>.15)add('ventas','info',40,'Brecha BCV–USDT: '+pct((T.r.usdt-T.r.bcv)/T.r.bcv),'Incentiva el pago en divisa o ajusta tus precios.');
+  if(T.age>=2)add('ventas','warn',50,'Tus tasas tienen '+T.age+' días','Actualízalas para que tus márgenes sean reales.');
+  /* personal */
+  if(h.st==='bad')add('personal','bad',85,'Tus finanzas personales están en riesgo',h.msg);
+  if(h.pend>0)add('personal','info',45,'Falta apartar '+usd(h.pend)+' de ahorro','Hazlo apenas cobres para no gastarlo.');
+  var am=splitAmts(h.gain);
+  if(h.gain>0&&h.draws>am.p+.01)add('personal','warn',70,'Retiraste '+usd(h.draws)+' y tu parte personal es '+usd(am.p),'Retirar de más frena el crecimiento del negocio.');
+  else if(h.gain>0&&am.p>0&&h.draws<am.p*.5)add('personal','info',30,'Aún puedes retirar hasta '+usd(am.p-h.draws),'Es tu '+sp.p+'% personal de este mes.');
+  if(h.C>0)add('personal','info',30,'Fondo de emergencia ideal: '+usd(h.C*3),'Equivale a 3 meses de tu presupuesto.');
+  var gp=goalProgress(),goal=S.settings.goal||0;if(goal>0)add('personal','info',32,'Producto propio: '+usd(gp)+' de '+usd(goal)+' ('+pct(Math.min(1,gp/goal))+')','Cada mes aportas el '+sp.a+'% de tu ganancia neta.');
+  if(dom>=14&&dom<=16||dom>=29||dom<=2)add('personal','info',30,'Es quincena','Revisa tu presupuesto y aparta tu ahorro.');
+  var lb=S.settings.lastBackup,days=lb?dayDiff(lb):null;
+  if(S.sales.length+S.purchases.length>3&&(days==null||days>=7))add('personal','warn',58,days==null?'Aún no has hecho un respaldo':'Hace '+days+' días sin respaldo','En Tasas y respaldo: copia y guárdalo en tus notas.');
+  /* tips rotativos */
+  var di=Math.floor(Date.now()/864e5);for(var i=0;i<3;i++)add('tips','tip',10,'Tip del día',TIPS[(di*3+i)%TIPS.length]);
+  return L.sort(function(a,b){return b.w-a.w});
+}
+function sugCard(){
+  var all=suggest(),cat=UI.sc,list=all.filter(function(x){return cat==='all'||x.c===cat}),shown=UI.sugAll||cat!=='all'?list:list.slice(0,6);
+  var cats=[['all','Todas'],['stock','Stock'],['dinero','Dinero'],['ventas','Ventas'],['personal','Personal'],['tips','Tips']];
+  var col={bad:'var(--bad)',warn:'var(--warn)',good:'var(--good)',info:'var(--blue)',tip:'var(--muted)'};
+  return '<section class="card stack"><div class="row sb"><h3>Sugerencias</h3><span class="pill">'+all.length+'</span></div>'
+    +'<div class="row" style="align-items:flex-end"><div class="field grow"><label for="sug-cash">Dinero disponible hoy ($)</label><input type="text" id="sug-cash" inputmode="decimal" value="'+(S.settings.cash?inp(S.settings.cash):'')+'" placeholder="Ej: 80"></div><button class="btn" data-act="savecash">Guardar</button></div>'
+    +'<div class="chips">'+cats.map(function(c){return '<button class="chip'+(cat===c[0]?' on':'')+'" data-act="sugcat" data-v="'+c[0]+'">'+c[1]+'</button>'}).join('')+'</div>'
+    +'<div>'+(shown.length?shown.map(function(x){return '<div class="sug"><i class="d" style="background:'+col[x.k]+'"></i><div><div class="st">'+esc(x.t)+'</div><div class="ss">'+esc(x.s)+'</div></div></div>'}).join(''):'<div class="empty"><b>Todo en orden</b>No hay sugerencias en esta categoría.</div>')+'</div>'
+    +(cat==='all'&&list.length>6?'<button class="btn small ghost" data-act="sugall">'+(UI.sugAll?'Ver menos':'Ver todas ('+list.length+')')+'</button>':'')+'</section>';
 }
 
 /* tasas del día */
@@ -817,12 +1058,14 @@ async function rmPin(t){
 
 /* ---------- acciones ---------- */
 function armed(t,label){if(t.dataset.armed){return true}t.dataset.armed='1';var old=t.textContent;t.textContent=label||'Toca otra vez para confirmar';setTimeout(function(){delete t.dataset.armed;t.textContent=old},4000);return false}
-function copyText(text){
-  var ok=function(){toast('Respaldo copiado')};
-  var fallback=function(){var ta=$('#bk-text');ta.value=text;ta.focus();ta.select();toast('Selecciona y copia el texto')};
+function copyText(text,msg){
+  var ok=function(){toast(msg||'Respaldo copiado')};
+  var fallback=function(){var ta=$('#bk-text');
+    if(!ta){openSheet('Copia este texto','<div class="stack"><textarea id="bk-text" style="min-height:220px"></textarea></div>');ta=$('#bk-text')}
+    ta.value=text;ta.focus();ta.select();toast('Selecciona y copia el texto')};
   try{navigator.clipboard.writeText(text).then(ok,fallback)}catch(e){fallback()}
 }
-function snapshot(){var o={app:'xcstore',v:2,exportedAt:new Date().toISOString(),settings:S.settings};STORES.forEach(function(n){o[n]=S[n]});return JSON.stringify(o)}
+function snapshot(){var o={app:'xcstore',v:3,exportedAt:new Date().toISOString(),settings:S.settings};STORES.forEach(function(n){o[n]=S[n]});return JSON.stringify(o)}
 function saveRatesFrom(a,b,c,errId){
   var bv=num($(a).value),e=num($(b).value),u=num($(c).value),err=$(errId);
   if(bv<=0||e<=0||u<=0){err.textContent='Escribe las tres tasas en bolívares.';return false}
@@ -843,7 +1086,7 @@ var A={
   prodedit:function(t){prodSheet(t.dataset.id)},saveprod:saveProd,
   rmphoto:function(){F.img='';F.imgSet=true;var p=F.id?prod(F.id):null,hold=p?{id:p.id,name:p.name,img:''}:{name:$('#p-name').value||'?',img:''};$('#p-pic').innerHTML=pic(hold)},
   delprod:function(t){
-    var id=t.dataset.id;if(S.purchases.some(function(x){return x.productId===id&&!isInitial(x)})||S.sales.some(function(x){return x.productId===id})){
+    var id=t.dataset.id;if(S.purchases.some(function(x){return x.productId===id&&!isInitial(x)&&!x.adjust})||S.sales.some(function(x){return x.productId===id})){
       $('#p-err').textContent='Este producto tiene compras o ventas registradas. Déjalo con stock 0 en lugar de eliminarlo.';return}
     if(!armed(t))return;S.purchases.filter(function(x){return x.productId===id}).forEach(function(x){del('purchases',x.id)});del('products',id);closeSheet();toast('Producto eliminado');render()},
   saledetail:function(t){saleDetail(t.dataset.id)},
@@ -862,20 +1105,31 @@ var A={
   expense:function(t){expenseSheet(null,t.dataset.item)},expenseedit:function(t){expenseSheet(t.dataset.id)},saveexpense:saveExpense,
   delexpense:function(t){if(!armed(t))return;del('expenses',t.dataset.id);closeSheet();toast('Gasto eliminado');render()},
   rep:function(t){UI.rep=t.dataset.v;render()},
+  adj:function(t){adjSheet(t.dataset.id)},saveadj:saveAdj,
+  step:function(t){var i=$('#a-new');i.value=Math.max(0,Math.floor(num(i.value))+(+t.dataset.d));updateAdj()},
+  biz:function(){bizSheet()},bizedit:function(t){bizSheet(t.dataset.id)},savebiz:saveBiz,
+  delbiz:function(t){if(!armed(t))return;del('bizexp',t.dataset.id);closeSheet();toast('Gasto eliminado');render()},
+  price:function(){priceSheet()},applyprice:applyPrice,
+  split:function(){splitSheet()},savesplit:saveSplit,
+  savecash:function(){S.settings.cash=Math.max(0,num($('#sug-cash').value));saveSettings();toast('Dinero guardado');render()},
+  sugcat:function(t){UI.sc=t.dataset.v;render()},
+  sugall:function(){UI.sugAll=!UI.sugAll;render()},
+  plm:function(t){UI.plm=shiftMonth(UI.plm||today().slice(0,7),+t.dataset.d);render()},
+  copypl:function(){copyText(plText(),'Resumen copiado')},
   hist:function(t){UI.h[t.dataset.k]=t.dataset.v;render()},
   ratesheet:function(){autoRates(true)},autorates:function(){autoRates(true)},
   pinkey:function(t){pinKey(t.dataset.v)},pinsheet:pinSheet,savepin:function(){savePin()},rmpin:function(t){rmPin(t)},
   saverates:function(){if(saveRatesFrom('#r-bcv','#r-eur','#r-usdt','#r-err')){toast('Tasas guardadas');render()}},
   saverates2:function(){if(saveRatesFrom('#rr-bcv','#rr-eur','#rr-usdt','#rr-err')){closeSheet();toast('Tasas de hoy guardadas');render()}},
   keeprates:function(){try{localStorage.setItem('xc-rate-skip',today())}catch(e){UI.skip=today()}closeSheet();toast('Seguimos con las tasas anteriores')},
-  backup:function(){copyText(snapshot())},
+  backup:function(){var tx=snapshot();S.settings.lastBackup=today();saveSettings();copyText(tx,'Respaldo copiado')},
   restore:function(t){
     var err=$('#bk-err'),txt=$('#bk-text').value.trim();err.textContent='';
     if(!txt){err.textContent='Pega primero el texto del respaldo.';return}
     var d;try{d=JSON.parse(txt)}catch(e){err.textContent='El texto no es un respaldo válido.';return}
     if(!d||d.app!=='xcstore'||!['products','purchases','sales','rates'].every(function(n){return Array.isArray(d[n])})){err.textContent='Ese archivo no es un respaldo de XC iStore.';return}
     if(!armed(t,'Toca otra vez: reemplaza tus datos'))return;
-    dbClear();STORES.forEach(function(n){S[n]=[];(d[n]||[]).forEach(function(o){put(n,o)})});S.settings=d.settings||{capitalTarget:100};saveSettings();toast('Respaldo restaurado');render()},
+    dbClear();STORES.forEach(function(n){S[n]=[];(d[n]||[]).forEach(function(o){put(n,o)})});S.settings=normSettings(d.settings);saveSettings();toast('Respaldo restaurado');render()},
   wipe:function(t){if(!armed(t,'Toca otra vez: borra todo'))return;dbClear();STORES.forEach(function(n){S[n]=[]});toast('Datos borrados');render()}
 };
 
@@ -888,7 +1142,8 @@ document.addEventListener('input',function(e){
   if(t.id==='q'){UI.q=t.value;renderSalesList();return}
   if(t.id==='hq'){UI.h.q=t.value;renderHist();return}
   if(t.id==='s-prod'&&F.kind==='sale'){defaultPrice()}
-  if(t.hasAttribute('data-live')){if(F.kind==='sale')updateSale();else if(F.kind==='buy')updateBuy()}
+  if(t.id==='pr-prod'&&F.kind==='price'){priceDefaults();return}
+  if(t.hasAttribute('data-live')){if(F.kind==='sale')updateSale();else if(F.kind==='buy')updateBuy();else if(F.kind==='adj')updateAdj();else if(F.kind==='price')updatePrice();else if(F.kind==='split')updateSplit()}
 });
 document.addEventListener('change',function(e){
   var t=e.target;
@@ -909,7 +1164,7 @@ $('#logo').src=IMGS.logo||'';$('#lock-logo').src=IMGS.logo||'';
   try{
     db=await openDB();
     for(var i=0;i<STORES.length;i++)S[STORES[i]]=await getAll(STORES[i]);
-    var st=await getKey('meta','settings');if(st&&st.value)S.settings=Object.assign({capitalTarget:100},st.value);
+    var st=await getKey('meta','settings');if(st&&st.value)S.settings=normSettings(st.value);
   }catch(e){db=null;UI.persist=false}
   if(S.settings.pinHash)showLock();
   render();
