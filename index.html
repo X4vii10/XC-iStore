@@ -184,6 +184,15 @@ textarea{min-height:92px;font-family:var(--f-mono);font-size:12px}
 .ck.op{background:var(--surface2);color:var(--muted)}.ck.clr{color:var(--warn)}.ck.eq{background:var(--blue);color:var(--blue-ink);border-color:var(--blue)}
 .ck:active{filter:brightness(1.25)}
 @media (max-height:700px){.ck{min-height:46px}}
+.dr-scrim{position:fixed;inset:0;z-index:38;background:rgba(3,5,10,.6)}
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(84vw,330px);z-index:39;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:env(safe-area-inset-top,0px) 6px calc(16px + env(safe-area-inset-bottom,0px));overflow:auto;animation:drin .2s ease}
+@keyframes drin{from{transform:translateX(-100%)}to{transform:none}}
+.dr-h{display:flex;align-items:center;gap:12px;padding:16px 10px 8px}
+.dr-t{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 12px 4px}
+.dr-i{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:10px;font-size:15px}
+.dr-i.on{background:var(--surface2);color:var(--blue)}
+.dr-i svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.brand .icon-btn{margin-right:2px}
 .stackbar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--surface2)}
 .stackbar i{display:block;height:100%}
 .sug{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
@@ -213,14 +222,13 @@ input[type=password]{letter-spacing:.3em}
 <div class="wrap">
   <header class="top">
     <div class="brand">
+      <button class="icon-btn" data-act="menu" aria-label="Abrir menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <img class="logo" id="logo" alt="Logo XC iStore" width="40" height="40">
       <div><b>XC iStore</b><small>Panel privado</small></div>
     </div>
     <div class="top-r">
       <span id="persist"></span>
-      <button class="icon-btn" data-act="conv" aria-label="Calculadora de conversión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7.5h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg></button>
-      <button class="icon-btn" id="ratesbtn" data-act="tab" data-v="rates" aria-label="Tasas y respaldo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg></button>
-      <button class="icon-btn" data-act="theme" aria-label="Cambiar entre tema oscuro y claro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
+      <button class="icon-btn" data-act="conv" aria-label="Calculadora de conversión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M8.5 7.5h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg></button>
     </div>
   </header>
   <main id="view" class="stack"></main>
@@ -352,9 +360,8 @@ var PLACES=['La Hoyada','Bellas Artes','Plaza Venezuela','Delivery','Envío naci
 
 function render(){
   document.querySelectorAll('.tab').forEach(function(b){b.classList.toggle('on',b.dataset.v===UI.tab)});
-  $('#ratesbtn').classList.toggle('on',UI.tab==='rates');
   $('#persist').innerHTML=UI.persist?'':'<span class="pill warn">Sin guardado</span>';
-  var v={home:viewHome,sales:viewSales,stock:viewStock,personal:viewPersonal,reports:viewReports,rates:viewRates}[UI.tab]||viewHome;
+  var v={home:viewHome,sales:viewSales,stock:viewStock,personal:viewPersonal,reports:viewReports,rates:viewRates,sug:viewSug,split:viewSplit,pl:viewPl}[UI.tab]||viewHome;
   $('#view').innerHTML=v();
   if(UI.tab==='sales')renderSalesList();
   if(UI.tab==='reports')renderHist();
@@ -389,7 +396,6 @@ function viewHome(){
     +'<button class="rate" data-act="tab" data-v="rates"><span class="cap">Euro BCV</span><span class="v mono">'+fmt(r.euro)+'</span></button>'
     +'<button class="rate" data-act="tab" data-v="rates"><span class="cap">USDT</span><span class="v mono">'+fmt(r.usdt)+'</span></button>'
   +'</div>'
-  +'<button class="btn block" data-act="conv">Calculadora de conversión ($ · € · Bs)</button>'
   +(age>=1?'<div class="row"><span class="pill warn">Tasa de hace '+age+(age===1?' día':' días')+'</span><button class="btn small ghost" data-act="ratesheet">Actualizar hoy</button></div>':'')
   +(S.products.length?'':'<section class="card"><h3>Primera vez aquí</h3><p class="muted" style="margin:6px 0 12px;font-size:14px">Para traer tus datos, abre la versión anterior, copia el respaldo en Tasas y respaldo, y pégalo aquí con Restaurar respaldo. O empieza de cero creando tus productos en Stock.</p><div class="row wrapr"><button class="btn small primary" data-act="tab" data-v="rates">Restaurar respaldo</button><button class="btn small" data-act="tab" data-v="stock">Crear productos</button></div></section>')
   +'<button class="btn primary block" data-act="sale">Registrar venta</button>'
@@ -400,16 +406,7 @@ function viewHome(){
     +'<div class="kpi"><span class="cap">Margen neto</span><span class="v num">'+pct(m.netMargin)+'</span></div>'
     +'<div class="kpi"><span class="cap">Ventas</span><span class="v num">'+m.n+'</span></div>'
   +'</div>'
-  +'<div class="foot">Neto = ingresos − costo de lo vendido ('+usd(m.cost)+') − gastos de venta ('+usd(m.extra)+') − gastos extras del negocio ('+usd(m.bx)+'). Cifras en dólares reales a tasa USDT.</div>'
-  +'<section class="card"><div class="row sb"><h3>Últimos 7 días</h3><div class="legend"><span><i class="dot" style="background:var(--blue)"></i>Ingresos</span><span><i class="dot" style="background:var(--purple)"></i>Ganancia</span></div></div><div class="bars">'+bars+'</div></section>'
-  +'<section class="card"><div class="row sb"><h3>Finanzas personales</h3>'+healthPill(hl.st)+'</div><p class="muted" style="margin:8px 0 12px;font-size:14px">'+esc(hl.msg)+'</p>'
-    +'<div class="three"><div><span class="cap">Ganancia libre</span><span class="num big-n">'+usd(hl.gfree)+'</span></div><div><span class="cap">Reinvertir</span><span class="num big-n" style="color:var(--blue)">'+usd(hl.reinv)+'</span></div><div><span class="cap">Retirable</span><span class="num big-n" style="color:var(--purple)">'+usd(hl.retirable)+'</span></div></div>'
-    +'<div class="row" style="margin-top:12px"><button class="btn small ghost" data-act="tab" data-v="personal">Ver detalle</button></div></section>'
-  +splitCard(m)+sugCard()
-  +'<section class="card"><div class="row sb"><h3>Inventario</h3><button class="btn small ghost" data-act="tab" data-v="stock">Ver stock</button></div>'
-    +'<div class="row" style="gap:24px;margin-top:10px"><div><span class="cap">Capital en stock</span><span class="num big-n">'+usd(stockVal)+'</span></div><div><span class="cap">Unidades</span><span class="num big-n">'+units+'</span></div></div>'
-    +(low.length?'<div style="margin-top:12px"><span class="pill warn">Stock bajo</span> <span class="muted" style="font-size:13px">'+esc(low.join(', '))+'</span></div>':'')
-  +'</section>'
+  +(low.length?'<button class="card row" style="text-align:left;width:100%;gap:10px" data-act="tab" data-v="stock"><span class="pill warn">Stock bajo</span><span class="muted" style="font-size:13px">'+esc(low.join(', '))+'</span></button>':'')
   +'<section class="card"><h3>Últimas ventas</h3>'+(recent.length?'<div class="list">'+recent.map(saleRow).join('')+'</div>':'<div class="empty"><b>Aún no hay ventas</b>Registra la primera con el botón azul.</div>')+'</section>';
 }
 
@@ -508,7 +505,7 @@ function viewReports(){
   +'<section class="card"><div class="legend"><span><i class="dot" style="background:var(--blue)"></i>Ventas</span><span><i class="dot" style="background:var(--muted)"></i>Inversión</span><span><i class="dot" style="background:var(--purple)"></i>Ganancia</span></div>'+chartSVG(b)
     +'<div class="scroll-x" style="margin-top:8px"><table><thead><tr><th>'+(UI.rep==='week'?'Semana desde':'Mes')+'</th><th>Ventas</th><th>Inversión</th><th>Ganancia</th></tr></thead><tbody>'+rows+'<tr><td><b>Total</b></td><td><b>'+usd(tv)+'</b></td><td><b>'+usd(ti)+'</b></td><td><b>'+usd(tg)+'</b></td></tr></tbody></table></div>'
     +'<div class="foot" style="margin-top:8px">Inversión = compras registradas (no incluye el inventario inicial ni los ajustes). Ganancia = neta, después de gastos extras del negocio. Dólares reales a tasa USDT.</div></section>'
-  +plCard()+'<h2>Historial</h2>'
+  +'<h2>Historial</h2>'
   +'<div class="chips">'+ch('type','all','Todo')+ch('type','sale','Ventas')+ch('type','buy','Compras')+ch('type','inc','Ingresos')+ch('type','exp','Gastos')+ch('type','bexp','Negocio')+ch('type','adj','Ajustes')+'</div>'
   +'<div class="chips">'+ch('range','7','7 días')+ch('range','30','30 días')+ch('range','all','Todo')+'</div>'
   +'<div class="field"><input type="text" id="hq" placeholder="Buscar en el historial" value="'+esc(f.q)+'" aria-label="Buscar en el historial"></div>'
@@ -535,6 +532,10 @@ function renderHist(){
   el.innerHTML=html+'</div></div>';
 }
 
+function periodChips(){return '<div class="chips">'+[['today','Hoy'],['week','7 días'],['month','Este mes'],['all','Todo']].map(function(x){return '<button class="chip'+(UI.period===x[0]?' on':'')+'" data-act="period" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>'}
+function viewSug(){return '<h2>Sugerencias</h2>'+sugCard()}
+function viewSplit(){var m=addNet(metrics(S.sales.filter(function(x){return inPeriod(x.date)})),inPeriod);return '<div class="row sb wrapr"><h2>Reparto de ganancia</h2>'+periodChips()+'</div>'+splitCard(m)}
+function viewPl(){return '<h2>Estado de resultados</h2>'+plCard()}
 function viewRates(){
   var r=curRates();
   var hist=S.rates.slice().sort(function(a,b){return b.createdAt-a.createdAt}).slice(0,8).map(function(x){return '<div class="item" style="cursor:default"><div class="grow"><div class="t mono" style="font-size:14px">BCV '+fmt(x.bcv)+' · € '+fmt(x.euro)+' · USDT '+fmt(x.usdt)+'</div></div><div class="r s">'+dayLabel(x.date)+'</div></div>'}).join('');
@@ -562,29 +563,32 @@ function seg(id,key,opts,cur){return '<div class="seg" id="'+id+'">'+opts.map(fu
 function prodOpts(sel){return S.products.map(function(p){return '<option value="'+p.id+'"'+(p.id===sel?' selected':'')+'>'+esc(p.name)+' ('+pstats(p).stock+')</option>'}).join('')}
 function sheetOpen(){return !$('#scrim').hidden}
 
-function saleSheet(){
+function saleSheet(id){
   if(!S.products.length){toast('Primero crea un producto en Stock');return}
-  F={kind:'sale',basis:'bcv'};
-  openSheet('Registrar venta',
+  var o=id?S.sales.find(function(y){return y.id===id}):null;
+  F={kind:'sale',basis:o?o.basis:'bcv',old:o,id:o?o.id:null,rates:o?o.rates:null};
+  openSheet(o?'Editar venta':'Registrar venta',
     '<div class="stack">'
-    +'<div class="row"><div id="s-pic"></div><div class="field grow"><label for="s-prod">Producto (stock)</label><select id="s-prod" data-live>'+prodOpts()+'</select></div></div>'
-    +'<div class="two"><div class="field"><label for="s-qty">Cantidad</label><input type="text" id="s-qty" inputmode="numeric" value="1" data-live></div>'
-    +'<div class="field"><label for="s-price">Precio unitario ($)</label><input type="text" id="s-price" inputmode="decimal" data-live></div></div>'
-    +'<div class="field"><label>Precio basado en</label>'+seg('s-basis','basis',[['bcv','Tasa BCV'],['usd','Divisa (efectivo)']],'bcv')+'</div>'
-    +'<div class="two"><div class="field"><label for="s-pay">Método de pago</label><select id="s-pay">'+PAY.map(function(x){return '<option>'+x+'</option>'}).join('')+'</select></div>'
-    +'<div class="field"><label for="s-date">Fecha</label><input type="date" id="s-date" value="'+today()+'"></div></div>'
-    +'<div class="field"><label for="s-place">Lugar de entrega</label><input type="text" id="s-place" list="places" placeholder="La Hoyada, Bellas Artes..."><datalist id="places">'+PLACES.map(function(x){return '<option value="'+x+'">'}).join('')+'</datalist></div>'
-    +'<div class="field"><label for="s-extra">Gasto de la venta en $ (delivery, envío)</label><input type="text" id="s-extra" inputmode="decimal" value="0" data-live></div>'
+    +'<div class="row"><div id="s-pic"></div><div class="field grow"><label for="s-prod">Producto (stock)</label><select id="s-prod" data-live>'+prodOpts(o?o.productId:undefined)+'</select></div></div>'
+    +'<div class="two"><div class="field"><label for="s-qty">Cantidad</label><input type="text" id="s-qty" inputmode="numeric" value="'+(o?o.qty:1)+'" data-live></div>'
+    +'<div class="field"><label for="s-price">Precio unitario ($)</label><input type="text" id="s-price" inputmode="decimal" value="'+(o?inp(o.unitNominal):'')+'" data-live></div></div>'
+    +'<div class="field"><label>Precio basado en</label>'+seg('s-basis','basis',[['bcv','Tasa BCV'],['usd','Divisa (efectivo)']],F.basis)+'</div>'
+    +'<div class="two"><div class="field"><label for="s-pay">Método de pago</label><select id="s-pay">'+PAY.map(function(x){return '<option'+(o&&o.pay===x?' selected':'')+'>'+x+'</option>'}).join('')+'</select></div>'
+    +'<div class="field"><label for="s-date">Fecha</label><input type="date" id="s-date" value="'+(o?o.date:today())+'"></div></div>'
+    +'<div class="field"><label for="s-place">Lugar de entrega</label><input type="text" id="s-place" list="places" placeholder="La Hoyada, Bellas Artes..." value="'+esc(o?o.place||'':'')+'"><datalist id="places">'+PLACES.map(function(x){return '<option value="'+x+'">'}).join('')+'</datalist></div>'
+    +'<div class="field"><label for="s-extra">Gasto de la venta en $ (delivery, envío)</label><input type="text" id="s-extra" inputmode="decimal" value="'+(o?inp(o.extraReal||0):'0')+'" data-live></div>'
+    +(o?'<div class="foot">Se usan las tasas del día de la venta original ('+fdate(o.rates.date||o.date)+') y el costo que tenía entonces.</div>':'')
     +'<div class="prev" id="s-prev"></div><div class="err" id="s-err"></div>'
-    +'<button class="btn primary block" data-act="savesale">Guardar venta</button></div>');
-  defaultPrice();updateSale();
+    +'<button class="btn primary block" data-act="savesale">'+(o?'Guardar cambios':'Guardar venta')+'</button></div>');
+  if(o){var op=prod(o.productId);if(op)$('#s-pic').innerHTML=pic(op,true)}else defaultPrice();
+  updateSale();
 }
 function defaultPrice(){var p=prod($('#s-prod').value);if(!p)return;$('#s-price').value=inp(F.basis==='usd'?(p.priceDiv||p.priceBcv):p.priceBcv);$('#s-pic').innerHTML=pic(p,true)}
 function saleCalc(){
-  var p=prod($('#s-prod').value),qty=Math.floor(num($('#s-qty').value)),price=num($('#s-price').value),extra=num($('#s-extra').value),r=curRates();
-  if(!p)return null;var st=pstats(p);
-  var rev=toReal(price*qty,F.basis,r),cost=st.avg*qty,pro=rev-cost-extra;
-  return {p:p,st:st,qty:qty,price:price,extra:extra,r:r,rev:rev,cost:cost,pro:pro,bs:price*qty*(r.bcv||0)};
+  var p=prod($('#s-prod').value),qty=Math.floor(num($('#s-qty').value)),price=num($('#s-price').value),extra=num($('#s-extra').value),r=F.rates||curRates();
+  if(!p)return null;var st=pstats(p),o=F.old,same=!!(o&&o.productId===p.id&&o.qty);
+  var unit=same?o.costReal/o.qty:st.avg,rev=toReal(price*qty,F.basis,r),cost=unit*qty,pro=rev-cost-extra;
+  return {p:p,st:st,stock:st.stock+(o&&o.productId===p.id?o.qty:0),qty:qty,price:price,extra:extra,r:r,rev:rev,cost:cost,pro:pro,bs:price*qty*(r.bcv||0)};
 }
 function updateSale(){
   var c=saleCalc();if(!c)return;
@@ -598,27 +602,30 @@ function saveSale(){
   var c=saleCalc(),err=$('#s-err');if(!c)return;
   if(c.qty<1){err.textContent='La cantidad debe ser 1 o más.';return}
   if(c.price<=0){err.textContent='Escribe el precio de venta.';return}
-  if(c.qty>c.st.stock){err.textContent='Solo quedan '+c.st.stock+' de este producto. Registra una compra primero.';return}
+  if(c.qty>c.stock){err.textContent='Solo quedan '+c.stock+' de este producto. Registra una compra primero.';return}
   if(F.basis==='bcv'&&!c.r.bcv){err.textContent='Registra la tasa BCV en Tasas.';return}
-  put('sales',{id:uid(),date:$('#s-date').value||today(),productId:c.p.id,name:c.p.name,qty:c.qty,unitNominal:c.price,basis:F.basis,
-    pay:$('#s-pay').value,place:$('#s-place').value.trim(),extraReal:c.extra,rates:c.r,revenueReal:c.rev,costReal:c.cost,profitReal:c.pro,createdAt:Date.now()});
-  closeSheet();toast('Venta guardada');render();
+  var o=F.old;
+  put('sales',{id:F.id||uid(),date:$('#s-date').value||today(),productId:c.p.id,name:c.p.name,qty:c.qty,unitNominal:c.price,basis:F.basis,
+    pay:$('#s-pay').value,place:$('#s-place').value.trim(),extraReal:c.extra,rates:c.r,revenueReal:c.rev,costReal:c.cost,profitReal:c.pro,createdAt:o?o.createdAt:Date.now()});
+  closeSheet();toast(o?'Venta actualizada':'Venta guardada');render();
 }
 
-function buySheet(id){
-  F={kind:'buy',basis:'euro'};
-  openSheet('Registrar compra',
-    '<div class="stack"><div class="field"><label for="b-prod">Producto (stock)</label><select id="b-prod" data-live>'+prodOpts(id)+'</select></div>'
-    +'<div class="two"><div class="field"><label for="b-qty">Unidades compradas</label><input type="text" id="b-qty" inputmode="numeric" value="1" data-live></div>'
-    +'<div class="field"><label for="b-total">Total pagado ($)</label><input type="text" id="b-total" inputmode="decimal" placeholder="0,00" data-live></div></div>'
-    +'<div class="field"><label>Ese total está a</label>'+seg('b-basis','basis',[['euro','Tasa euro'],['bcv','Tasa BCV'],['usd','Divisa']],'euro')+'</div>'
-    +'<div class="field"><label for="b-date">Fecha</label><input type="date" id="b-date" value="'+today()+'"></div>'
+function buySheet(id,eid){
+  var o=eid?S.purchases.find(function(y){return y.id===eid}):null;if(o&&o.adjust)return;
+  F={kind:'buy',basis:o?o.basis:'euro',old:o,id:o?o.id:null,rates:o?o.rates:null};
+  openSheet(o?'Editar compra':'Registrar compra',
+    '<div class="stack"><div class="field"><label for="b-prod">Producto (stock)</label><select id="b-prod" data-live>'+prodOpts(o?o.productId:id)+'</select></div>'
+    +'<div class="two"><div class="field"><label for="b-qty">Unidades compradas</label><input type="text" id="b-qty" inputmode="numeric" value="'+(o?o.qty:1)+'" data-live></div>'
+    +'<div class="field"><label for="b-total">Total pagado ($)</label><input type="text" id="b-total" inputmode="decimal" placeholder="0,00" value="'+(o?inp(o.totalNominal):'')+'" data-live></div></div>'
+    +'<div class="field"><label>Ese total está a</label>'+seg('b-basis','basis',[['euro','Tasa euro'],['bcv','Tasa BCV'],['usd','Divisa']],F.basis)+'</div>'
+    +'<div class="field"><label for="b-date">Fecha</label><input type="date" id="b-date" value="'+(o?o.date:today())+'"></div>'
+    +(o?'<div class="foot">Se usan las tasas del día de la compra original ('+fdate(o.rates&&o.rates.date||o.date)+').</div>':'')
     +'<div class="prev" id="b-prev"></div><div class="err" id="b-err"></div>'
-    +'<button class="btn primary block" data-act="savebuy">Guardar compra</button></div>');
+    +'<button class="btn primary block" data-act="savebuy">'+(o?'Guardar cambios':'Guardar compra')+'</button></div>');
   updateBuy();
 }
 function buyCalc(){
-  var p=prod($('#b-prod').value),qty=Math.floor(num($('#b-qty').value)),total=num($('#b-total').value),r=curRates();
+  var p=prod($('#b-prod').value),qty=Math.floor(num($('#b-qty').value)),total=num($('#b-total').value),r=F.rates||curRates();
   if(!p)return null;var unit=qty?total/qty:0,real=toReal(unit,F.basis,r);
   return {p:p,qty:qty,total:total,r:r,unit:unit,real:real};
 }
@@ -634,14 +641,18 @@ function saveBuy(){
   if(c.qty<1){err.textContent='Escribe cuántas unidades compraste.';return}
   if(c.total<=0){err.textContent='Escribe el total pagado.';return}
   if(F.basis==='euro'&&!c.r.euro||F.basis==='bcv'&&!c.r.bcv){err.textContent='Registra primero la tasa en Tasas.';return}
-  put('purchases',{id:uid(),date:$('#b-date').value||today(),productId:c.p.id,qty:c.qty,totalNominal:c.total,basis:F.basis,unitNominal:c.unit,totalReal:toReal(c.total,F.basis,c.r),rates:c.r,note:'',createdAt:Date.now()});
-  closeSheet();toast('Compra guardada');render();
+  var o=F.old;
+  if(o){var op=prod(o.productId);
+    if(op&&op.id===c.p.id){if(pstats(c.p).stock-o.qty+c.qty<0){err.textContent='Con esa cantidad el stock quedaría en negativo (ya vendiste unidades de esta compra).';return}}
+    else if(op&&pstats(op).stock-o.qty<0){err.textContent='Al mover la compra, el producto anterior quedaría con stock negativo.';return}}
+  put('purchases',Object.assign({},o||{},{id:F.id||uid(),date:$('#b-date').value||today(),productId:c.p.id,qty:c.qty,totalNominal:c.total,basis:F.basis,unitNominal:c.unit,totalReal:toReal(c.total,F.basis,c.r),rates:c.r,note:o?o.note||'':'',createdAt:o?o.createdAt:Date.now()}));
+  closeSheet();toast(o?'Compra actualizada':'Compra guardada');render();
 }
 function buyDetail(id){
   var x=S.purchases.find(function(y){return y.id===id});if(!x)return;var p=prod(x.productId);F={kind:'detail',id:id};
   var rows=[['Producto',esc(p?p.name:'—')],['Fecha',dayLabel(x.date)],['Unidades',x.qty],['Total pagado','$'+fmt(x.totalNominal)+' a '+(x.basis==='euro'?'tasa euro':x.basis==='bcv'?'tasa BCV':'divisa')],['Costo unitario','$'+fmt(x.unitNominal)],['Total en dólar real',usd(x.totalReal)]];
   if(x.adjust)rows=[['Producto',esc(p?p.name:'—')],['Fecha',dayLabel(x.date)],['Ajuste',(x.qty>0?'+':'')+x.qty+' u.'],['Motivo',esc((x.note||'').replace('Ajuste de stock: ',''))],['Valor a costo',usd(x.totalReal)]];
-  openSheet(x.adjust?'Detalle de ajuste':'Detalle de compra','<div class="stack"><div class="prev">'+rows.map(function(r){return '<div class="l"><span class="muted">'+r[0]+'</span><span class="mono">'+r[1]+'</span></div>'}).join('')+'</div><div class="err" id="d-err"></div><button class="btn danger block" data-act="delbuy" data-id="'+id+'">'+(x.adjust?'Eliminar ajuste':'Eliminar compra')+'</button></div>');
+  openSheet(x.adjust?'Detalle de ajuste':'Detalle de compra','<div class="stack"><div class="prev">'+rows.map(function(r){return '<div class="l"><span class="muted">'+r[0]+'</span><span class="mono">'+r[1]+'</span></div>'}).join('')+'</div><div class="err" id="d-err"></div>'+(x.adjust?'':'<button class="btn primary block" data-act="buyedit" data-id="'+id+'">Editar compra</button>')+'<button class="btn danger block" data-act="delbuy" data-id="'+id+'">'+(x.adjust?'Eliminar ajuste':'Eliminar compra')+'</button></div>');
 }
 
 function prodSheet(id){
@@ -677,7 +688,7 @@ function saleDetail(id){
     ['Ganancia neta','<b style="color:var(--purple)">'+usd(s.profitReal)+' ('+pct(s.revenueReal?s.profitReal/s.revenueReal:0)+')</b>']];
   if(s.basis==='bcv')rows.splice(5,0,['Bolívares cobrados','Bs '+fmt(s.unitNominal*s.qty*(s.rates.bcv||0))]);
   openSheet('Detalle de venta','<div class="stack"><div class="prev">'+rows.map(function(r){return '<div class="l"><span class="muted">'+r[0]+'</span><span class="mono">'+r[1]+'</span></div>'}).join('')+'</div>'
-    +'<div class="foot">Si te equivocaste, elimina la venta y vuelve a registrarla. El producto recupera su stock.</div><button class="btn danger block" data-act="delsale" data-id="'+id+'">Eliminar venta</button></div>');
+    +'<button class="btn primary block" data-act="saleedit" data-id="'+id+'">Editar venta</button><div class="foot">Al editar se usan las tasas y el costo del día de la venta. Si prefieres las tasas de hoy, elimínala y regístrala de nuevo.</div><button class="btn danger block" data-act="delsale" data-id="'+id+'">Eliminar venta</button></div>');
 }
 
 /* personal: ingresos, rubros, gastos */
@@ -1022,6 +1033,26 @@ function cvKey(k){
     else{if(cur==='0')e=e.slice(0,-1);e+=k}}
   if(e.length>24)return;C.expr=e;updateConv();
 }
+/* menú lateral */
+var ICO={home:'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',sales:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',stock:'M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10',personal:'M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l12-3v3M17 14h2',reports:'M4 20V10M10 20V4M16 20v-7M2 20h20',
+  calc:'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 7.5h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01',tag:'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01',bulb:'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z',pie:'M12 3v9h9M20 15a9 9 0 1 1-8-12',doc:'M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6',
+  rates:'M4 8h13l-3-3M20 16H7l3 3',moon:'M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z',plus:'M12 5v14M5 12h14',lock:'M6 11h12v10H6zM8 11V8a4 4 0 0 1 8 0v3'};
+function menuItems(){
+  var it=[['Principal',[['home','Inicio','tab','home'],['sales','Ventas','tab','sales'],['stock','Stock','tab','stock'],['personal','Personal','tab','personal'],['reports','Reportes e historial','tab','reports']]],
+    ['Herramientas',[['calc','Calculadora de conversión','conv'],['tag','Calculadora de precios','price'],['bulb','Sugerencias','tab','sug'],['pie','Reparto de ganancia','tab','split'],['doc','Estado de resultados','tab','pl']]],
+    ['Registrar rápido',[['plus','Nueva venta','sale'],['plus','Nueva compra','buy'],['plus','Editar stock de un producto','tab','stock'],['plus','Gasto del negocio','biz'],['plus','Ingreso personal','income'],['plus','Gasto personal','expense']]],
+    ['Ajustes',[['rates','Tasas, respaldo y seguridad','tab','rates'],['moon','Cambiar tema claro / oscuro','theme']]]];
+  if(typeof showLock==='function'&&S.settings.pinHash)it[3][1].push(['lock','Bloquear ahora','lock']);
+  return it;
+}
+function menuOpen(){
+  if($('#drawer'))return;var d=document.createElement('div');d.id='drawer';
+  d.innerHTML='<div class="dr-scrim" data-act="drclose"></div><nav class="drawer" aria-label="Menú"><div class="dr-h"><img class="logo" src="'+(IMGS.logo||'')+'" alt="" width="40" height="40"><div class="grow"><b>XC iStore</b><div class="muted" style="font-size:12px">Todo lo que trae tu app</div></div><button class="icon-btn" data-act="drclose" aria-label="Cerrar menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+   +menuItems().map(function(g){return '<div class="dr-t">'+g[0]+'</div><div class="dr-sec">'+g[1].map(function(x){var on=x[2]==='tab'&&UI.tab===x[3];return '<button class="dr-i'+(on?' on':'')+'" data-act="drgo" data-do="'+x[2]+'" data-v="'+(x[3]||'')+'"><svg viewBox="0 0 24 24"><path d="'+ICO[x[0]]+'"/></svg>'+esc(x[1])+'</button>'}).join('')+'</div>'}).join('')+'</nav>';
+  document.body.appendChild(d);
+}
+function menuClose(){var d=$('#drawer');if(d)d.remove()}
+
 /* tasas del día */
 UI.auto={ok:false,msg:'Aún no se ha intentado hoy.',log:[]};
 function skipped(){var skip='';try{skip=localStorage.getItem('xc-rate-skip')||''}catch(e){skip=UI.skip||''}return skip===today()}
@@ -1153,7 +1184,8 @@ var A={
   theme:function(){var root=document.documentElement,dark=root.dataset.theme?root.dataset.theme==='dark':!matchMedia('(prefers-color-scheme: light)').matches;
     root.dataset.theme=dark?'light':'dark';try{localStorage.setItem('xc-theme',root.dataset.theme)}catch(e){}},
   close:closeSheet,
-  sale:saleSheet,savesale:saveSale,
+  sale:function(){saleSheet()},saleedit:function(t){saleSheet(t.dataset.id)},savesale:saveSale,
+  buyedit:function(t){buySheet(null,t.dataset.id)},
   buy:function(t){buySheet(t.dataset.id)},savebuy:saveBuy,buydetail:function(t){buyDetail(t.dataset.id)},
   delbuy:function(t){var x=S.purchases.find(function(y){return y.id===t.dataset.id}),p=x&&prod(x.productId);
     if(p&&pstats(p).stock-x.qty<0){$('#d-err').textContent='Si eliminas esta compra, el stock quedaría en negativo.';return}
@@ -1182,6 +1214,9 @@ var A={
   delexpense:function(t){if(!armed(t))return;del('expenses',t.dataset.id);closeSheet();toast('Gasto eliminado');render()},
   rep:function(t){UI.rep=t.dataset.v;render()},
   conv:function(){convSheet()},
+  menu:menuOpen,drclose:menuClose,
+  drgo:function(t){menuClose();var f=A[t.dataset.do];if(f)f({dataset:{v:t.dataset.v,id:'',item:''}},{});if(t.dataset.do==='tab')window.scrollTo(0,0)},
+  lock:function(){if(typeof showLock==='function')showLock()},
   cvkey:function(t){cvKey(t.dataset.v)},
   cvclose:cvClose,
   cvrates:function(){cvClose();UI.tab='rates';render();window.scrollTo(0,0)},
@@ -1236,7 +1271,7 @@ document.addEventListener('change',function(e){
   if(t.id==='bk-file'){var f=t.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){$('#bk-text').value=String(rd.result);toast('Archivo cargado. Toca Restaurar respaldo.')};rd.readAsText(f)}
   if(t.id==='p-file'){var g=t.files[0];if(!g)return;resizeImage(g,function(url){F.img=url;F.imgSet=true;$('#p-pic').innerHTML='<div class="pic"><img src="'+url+'" alt="Foto del producto"></div>'})}
 });
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(!$('#scrim').hidden)closeSheet();else cvClose()}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(!$('#scrim').hidden)closeSheet();else if($('#drawer'))menuClose();else cvClose()}});
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState==='hidden'){hiddenAt=Date.now();return}
   if(S.settings.pinHash&&hiddenAt&&Date.now()-hiddenAt>30000&&$('#lockscr').hidden){showLock();return}
